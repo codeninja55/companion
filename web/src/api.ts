@@ -225,6 +225,8 @@ export interface CreateSessionOpts {
   container?: ContainerCreateOpts;
   resumeSessionAt?: string;
   forkSession?: boolean;
+  remoteConnectionId?: string;
+  remoteCwd?: string;
 }
 
 export interface BackendInfo {
@@ -1111,4 +1113,46 @@ export const api = {
     put<SavedPrompt>(`/prompts/${encodeURIComponent(id)}`, data),
   deletePrompt: (id: string) =>
     del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}`),
+
+  // Remote SSH profiles
+  listRemoteProfiles: () =>
+    get<import("./types.js").RemoteProfile[]>("/remotes"),
+  getRemoteProfile: (slug: string) =>
+    get<import("./types.js").RemoteProfile>(`/remotes/${encodeURIComponent(slug)}`),
+  createRemoteProfile: (data: {
+    name: string;
+    host: string;
+    port?: number;
+    username: string;
+    authMethod: "key" | "password";
+    keyPath?: string;
+  }) => post<import("./types.js").RemoteProfile>("/remotes", data),
+  updateRemoteProfile: (slug: string, data: {
+    name?: string;
+    host?: string;
+    port?: number;
+    username?: string;
+    authMethod?: "key" | "password";
+    keyPath?: string;
+  }) => put<import("./types.js").RemoteProfile>(`/remotes/${encodeURIComponent(slug)}`, data),
+  deleteRemoteProfile: (slug: string) =>
+    del(`/remotes/${encodeURIComponent(slug)}`),
+
+  // Remote SSH operations
+  testRemote: (slug: string) =>
+    post<{ ok: boolean; error?: string }>(`/remotes/${encodeURIComponent(slug)}/test`),
+  connectRemote: (slug: string) =>
+    post<import("./types.js").RemoteConnection>(`/remotes/${encodeURIComponent(slug)}/connect`),
+  disconnectRemote: (connectionId: string) =>
+    post<{ ok: boolean }>(`/remotes/connections/${encodeURIComponent(connectionId)}/disconnect`),
+  bootstrapRemote: (connectionId: string) =>
+    post<{ hasClaudeCode: boolean }>(`/remotes/connections/${encodeURIComponent(connectionId)}/bootstrap`),
+  listRemoteDirs: (connectionId: string, path?: string) =>
+    get<{ dirs: string[] }>(
+      `/remotes/connections/${encodeURIComponent(connectionId)}/dirs${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+    ),
+  mkdirRemote: (connectionId: string, path: string) =>
+    post<{ ok: boolean; error?: string }>(`/remotes/connections/${encodeURIComponent(connectionId)}/mkdir`, { path }),
+  listRemoteConnections: () =>
+    get<import("./types.js").RemoteConnection[]>("/remotes/connections"),
 };

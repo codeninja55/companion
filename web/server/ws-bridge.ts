@@ -123,6 +123,19 @@ export class WsBridge {
     session.state.cwd = hostCwd;
   }
 
+  /** Broadcast a remote bootstrap status message to browsers for a session. */
+  broadcastRemoteStatus(
+    sessionId: string,
+    status: "checking" | "found" | "not_found",
+    message: string,
+  ): void {
+    this.broadcastToSession(sessionId, {
+      type: "remote_bootstrap_status",
+      status,
+      message,
+    });
+  }
+
   /** Push a message to all connected browsers for a session (public, for PRPoller etc.). */
   broadcastToSession(sessionId: string, msg: BrowserIncomingMessage): void {
     const session = this.sessions.get(sessionId);

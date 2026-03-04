@@ -26,6 +26,7 @@ import { registerSkillRoutes } from "./routes/skills-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
+import { registerRemoteRoutes } from "./routes/remote-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
@@ -413,6 +414,8 @@ export function createRoutes(
         containerCwd: containerInfo?.containerCwd,
         resumeSessionAt,
         forkSession,
+        remoteConnectionId: body.remoteConnectionId,
+        remoteCwd: body.remoteCwd,
       });
 
       // Re-track container with real session ID and mark session as containerized
@@ -785,6 +788,8 @@ export function createRoutes(
           containerCwd: containerInfo?.containerCwd,
           resumeSessionAt,
           forkSession,
+          remoteConnectionId: body.remoteConnectionId,
+          remoteCwd: body.remoteCwd,
         });
 
         // Re-track container and mark session as containerized
@@ -1606,6 +1611,7 @@ export function createRoutes(
   registerSkillRoutes(api);
   registerCronRoutes(api, cronScheduler);
   registerAgentRoutes(api, agentExecutor);
+  registerRemoteRoutes(api);
 
   // ─── Worktree cleanup helper ────────────────────────────────────
 
