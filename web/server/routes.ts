@@ -28,6 +28,8 @@ import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
+import { registerPushRoutes } from "./routes/push-routes.js";
+import { getPushManager } from "./push-manager.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
@@ -1603,6 +1605,7 @@ export function createRoutes(
     updateCheckStaleMs: UPDATE_CHECK_STALE_MS,
   });
 
+  registerPushRoutes(api, getPushManager());
   registerSkillRoutes(api);
   registerCronRoutes(api, cronScheduler);
   registerAgentRoutes(api, agentExecutor);

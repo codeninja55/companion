@@ -124,6 +124,7 @@ interface AppState {
   darkMode: boolean;
   notificationSound: boolean;
   notificationDesktop: boolean;
+  pushNotificationsEnabled: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   taskPanelConfig: TaskPanelConfig;
@@ -145,6 +146,7 @@ interface AppState {
   toggleNotificationSound: () => void;
   setNotificationDesktop: (v: boolean) => void;
   toggleNotificationDesktop: () => void;
+  setPushNotificationsEnabled: (v: boolean) => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   setTaskPanelConfigMode: (open: boolean) => void;
@@ -299,6 +301,13 @@ function getInitialNotificationDesktop(): boolean {
   return false;
 }
 
+function getInitialPushNotificationsEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  const stored = localStorage.getItem("cc-push-notifications");
+  if (stored !== null) return stored === "true";
+  return false;
+}
+
 function getInitialDismissedVersion(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("cc-update-dismissed") || null;
@@ -369,6 +378,7 @@ export const useStore = create<AppState>((set) => ({
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
   notificationDesktop: getInitialNotificationDesktop(),
+  pushNotificationsEnabled: getInitialPushNotificationsEnabled(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   taskPanelConfig: getInitialTaskPanelConfig(),
@@ -442,6 +452,10 @@ export const useStore = create<AppState>((set) => ({
       localStorage.setItem("cc-notification-desktop", String(next));
       return { notificationDesktop: next };
     }),
+  setPushNotificationsEnabled: (v) => {
+    localStorage.setItem("cc-push-notifications", String(v));
+    set({ pushNotificationsEnabled: v });
+  },
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
   setTaskPanelConfigMode: (open) => set({ taskPanelConfigMode: open }),

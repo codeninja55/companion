@@ -81,6 +81,7 @@ export class WsBridge {
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
+  private onResultCompleted: ((sessionId: string) => void) | null = null;
   private autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
@@ -106,6 +107,11 @@ export class WsBridge {
   /** Register a callback for when a session completes its first turn. */
   onFirstTurnCompletedCallback(cb: (sessionId: string, firstUserMessage: string) => void): void {
     this.onFirstTurnCompleted = cb;
+  }
+
+  /** Register a callback for when a session produces a result (turn complete). */
+  onResultCompletedCallback(cb: (sessionId: string) => void): void {
+    this.onResultCompleted = cb;
   }
 
   /** Register a callback for when git info is resolved and branch is known. */
@@ -813,6 +819,11 @@ export class WsBridge {
       if (firstUserMsg && firstUserMsg.type === "user_message") {
         this.onFirstTurnCompleted(session.id, firstUserMsg.content);
       }
+    }
+
+    // Notify listeners that a result was produced (used for push notifications)
+    if (!msg.is_error && this.onResultCompleted) {
+      this.onResultCompleted(session.id);
     }
   }
 

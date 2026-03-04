@@ -11,26 +11,15 @@ export default defineConfig({
       // Use existing public/manifest.json — do not generate one
       manifest: false,
       registerType: "autoUpdate",
-      strategies: "generateSW",
-      workbox: {
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectManifest: {
         // Precache all build output: JS chunks (incl. lazy-loaded), CSS, HTML,
         // icons, SVGs, and the two terminal Nerd Font woff2 files (~2.4MB total)
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         // Main bundle exceeds default 2 MiB — raise to 5 MiB
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        skipWaiting: true,
-        clientsClaim: true,
-        // Hash routing: all navigations hit "/" → serve index.html from cache
-        navigateFallback: "index.html",
-        // Never intercept API calls, WebSocket upgrades, or SSE streams
-        navigateFallbackDenylist: [/^\/api/, /^\/ws/],
-        runtimeCaching: [
-          {
-            // All /api/* fetch() calls: always go to network, never cache
-            urlPattern: /^\/api\//,
-            handler: "NetworkOnly",
-          },
-        ],
       },
       devOptions: { enabled: false },
     }),
