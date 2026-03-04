@@ -56,6 +56,7 @@ import {
 import { validatePermission } from "./ai-validator.js";
 import { getSettings } from "./settings-manager.js";
 import { getEffectiveAiValidation } from "./ai-validation-settings.js";
+import { splitThinkTags, enrichThinkingOnlyMessages } from "./think-tag-parser.js";
 
 // ─── Bridge ───────────────────────────────────────────────────────────────────
 
@@ -730,9 +731,12 @@ export class WsBridge {
   }
 
   private handleAssistantMessage(session: Session, msg: CLIAssistantMessage) {
+    // Normalize <think>...</think> XML tags in text blocks into ThinkingBlock objects.
+    // Local models (Qwen, DeepSeek) emit these instead of native thinking blocks.
+    const normalizedContent = splitThinkTags(msg.message.content);
     const browserMsg: BrowserIncomingMessage = {
       type: "assistant",
-      message: msg.message,
+      message: { ...msg.message, content: normalizedContent },
       parent_tool_use_id: msg.parent_tool_use_id,
       timestamp: Date.now(),
     };
@@ -763,6 +767,23 @@ export class WsBridge {
           );
           session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
         }
+      }
+    }
+
+    // Enrich thinking-only assistant messages with the result text so there's visible content.
+    // This handles the case where a local model produced only <think> blocks with no text.
+    const lastAssistant = [...session.messageHistory].reverse().find((m) => m.type === "assistant");
+    if (lastAssistant && lastAssistant.type === "assistant" && msg.result) {
+      const enriched = enrichThinkingOnlyMessages(lastAssistant.message.content, msg.result);
+      if (enriched !== lastAssistant.message.content) {
+        lastAssistant.message = { ...lastAssistant.message, content: enriched };
+        // Re-broadcast the enriched assistant message so browsers update
+        this.broadcastToBrowsers(session, {
+          type: "assistant",
+          message: lastAssistant.message,
+          parent_tool_use_id: lastAssistant.parent_tool_use_id,
+          timestamp: lastAssistant.timestamp,
+        });
       }
     }
 
