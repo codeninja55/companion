@@ -115,6 +115,7 @@ export async function connect(profile: RemoteProfile): Promise<RemoteConnection>
     tunnelPort,
   };
 
+  allocatedPorts.add(tunnelPort);
   connections.set(id, conn);
   return conn;
 }
@@ -125,6 +126,7 @@ export async function disconnect(connectionId: string): Promise<void> {
   if (!conn) return;
 
   conn.status = "disconnected";
+  allocatedPorts.delete(conn.tunnelPort);
 
   const proc = processes.get(connectionId);
   if (proc) {
