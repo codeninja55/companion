@@ -60,6 +60,7 @@
     "hono": "^4.7.0",
     "posthog-js": "^1.347.2",
     "qrcode": "^1.5.4",
+    "web-push": "^3.6.7",
     "ws": "^8.19.0"
   },
   "devDependencies": {
@@ -72,6 +73,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.4.0",
     "@vitest/coverage-v8": "^4.0.18",

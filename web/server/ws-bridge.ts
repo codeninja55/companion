@@ -56,6 +56,7 @@ import {
 import { validatePermission } from "./ai-validator.js";
 import { getSettings } from "./settings-manager.js";
 import { getEffectiveAiValidation } from "./ai-validation-settings.js";
+import { splitThinkTags, enrichThinkingOnlyMessages } from "./think-tag-parser.js";
 
 // ─── Bridge ───────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ export class WsBridge {
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
+  private onResultCompleted: ((sessionId: string) => void) | null = null;
   private autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
@@ -105,6 +107,11 @@ export class WsBridge {
   /** Register a callback for when a session completes its first turn. */
   onFirstTurnCompletedCallback(cb: (sessionId: string, firstUserMessage: string) => void): void {
     this.onFirstTurnCompleted = cb;
+  }
+
+  /** Register a callback for when a session produces a result (turn complete). */
+  onResultCompletedCallback(cb: (sessionId: string) => void): void {
+    this.onResultCompleted = cb;
   }
 
   /** Register a callback for when git info is resolved and branch is known. */
@@ -743,9 +750,12 @@ export class WsBridge {
   }
 
   private handleAssistantMessage(session: Session, msg: CLIAssistantMessage) {
+    // Normalize <think>...</think> XML tags in text blocks into ThinkingBlock objects.
+    // Local models (Qwen, DeepSeek) emit these instead of native thinking blocks.
+    const normalizedContent = splitThinkTags(msg.message.content);
     const browserMsg: BrowserIncomingMessage = {
       type: "assistant",
-      message: msg.message,
+      message: { ...msg.message, content: normalizedContent },
       parent_tool_use_id: msg.parent_tool_use_id,
       timestamp: Date.now(),
     };
@@ -779,6 +789,23 @@ export class WsBridge {
       }
     }
 
+    // Enrich thinking-only assistant messages with the result text so there's visible content.
+    // This handles the case where a local model produced only <think> blocks with no text.
+    const lastAssistant = [...session.messageHistory].reverse().find((m) => m.type === "assistant");
+    if (lastAssistant && lastAssistant.type === "assistant" && msg.result) {
+      const enriched = enrichThinkingOnlyMessages(lastAssistant.message.content, msg.result);
+      if (enriched !== lastAssistant.message.content) {
+        lastAssistant.message = { ...lastAssistant.message, content: enriched };
+        // Re-broadcast the enriched assistant message so browsers update
+        this.broadcastToBrowsers(session, {
+          type: "assistant",
+          message: lastAssistant.message,
+          parent_tool_use_id: lastAssistant.parent_tool_use_id,
+          timestamp: lastAssistant.timestamp,
+        });
+      }
+    }
+
     // Re-check git state after each turn in case branch moved during the session.
     this.refreshGitInfo(session, { broadcastUpdate: true, notifyPoller: true });
 
@@ -805,6 +832,11 @@ export class WsBridge {
       if (firstUserMsg && firstUserMsg.type === "user_message") {
         this.onFirstTurnCompleted(session.id, firstUserMsg.content);
       }
+    }
+
+    // Notify listeners that a result was produced (used for push notifications)
+    if (!msg.is_error && this.onResultCompleted) {
+      this.onResultCompleted(session.id);
     }
   }
 

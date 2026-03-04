@@ -32,6 +32,7 @@ import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
 
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
+import { getPushManager } from "./push-manager.js";
 import { isRunningAsService } from "./service.js";
 import { getToken, verifyToken } from "./auth-manager.js";
 import { getCookie } from "hono/cookie";
@@ -116,6 +117,14 @@ wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
     sessionNames.setName(sessionId, title);
     wsBridge.broadcastNameUpdate(sessionId, title);
   }
+});
+
+// Send a push notification when a session produces a result
+wsBridge.onResultCompletedCallback((sessionId) => {
+  const name = sessionNames.getName(sessionId) || sessionId.slice(0, 8);
+  getPushManager()
+    .sendPushNotification(`Session complete: ${name}`, "Your Claude session has finished processing.")
+    .catch(() => {}); // fire-and-forget
 });
 
 console.log(`[server] Session persistence: ${sessionStore.directory}`);

@@ -19,6 +19,7 @@ import { navigateToSession } from "../utils/routing.js";
 import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
 import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
+import { ProviderManager } from "./ProviderManager.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { RemoteConnect } from "./RemoteConnect.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
@@ -120,6 +121,13 @@ export function HomePage() {
   const [selectedEnv, setSelectedEnv] = useState(() => localStorage.getItem("cc-selected-env") || "");
   const [showEnvDropdown, setShowEnvDropdown] = useState(false);
   const [showEnvManager, setShowEnvManager] = useState(false);
+
+  // Provider state
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [selectedProviderModel, setSelectedProviderModel] = useState("");
+  const [showProviderDropdown, setShowProviderDropdown] = useState(false);
+  const [showProviderManager, setShowProviderManager] = useState(false);
+  const providerDropdownRef = useRef<HTMLDivElement>(null);
 
   // Docker image readiness for selected env
   const [envImageState, setEnvImageState] = useState<ImagePullState | null>(null);
@@ -298,6 +306,9 @@ export function HomePage() {
       if (envDropdownRef.current && !envDropdownRef.current.contains(e.target as Node)) {
         setShowEnvDropdown(false);
       }
+      if (providerDropdownRef.current && !providerDropdownRef.current.contains(e.target as Node)) {
+        setShowProviderDropdown(false);
+      }
     }
     document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
@@ -322,6 +333,9 @@ export function HomePage() {
 
   const selectedModel = MODELS.find((m) => m.value === model) || MODELS[0];
   const selectedMode = MODES.find((m) => m.value === mode) || MODES[0];
+  const claudeBackend = backends.find((b) => b.id === "claude");
+  const availableProviders = (backend === "claude" && claudeBackend?.providers) || [];
+  const activeProvider = availableProviders.find((p) => p.slug === selectedProvider);
   const logoSrc = backend === "codex" ? "/logo-codex.svg" : "/logo.svg";
   const dirLabel = cwd ? cwd.split("/").pop() || cwd : "Select folder";
   const trimmedResumeSessionAt = useMemo(() => resumeSessionAt.trim(), [resumeSessionAt]);
@@ -619,6 +633,11 @@ export function HomePage() {
         ? launchOverride.createBranch
         : Boolean(effectiveBranch && isNewBranch);
 
+      // Build provider field: "slug::model"
+      const providerField = selectedProvider && selectedProviderModel
+        ? `${selectedProvider}::${selectedProviderModel}`
+        : undefined;
+
       // Create session with progress streaming
       const result = await createSessionStream(
         {
@@ -631,6 +650,7 @@ export function HomePage() {
           useWorktree: effectiveUseWorktree ? true : undefined,
           backend,
           codexInternetAccess: backend === "codex" ? true : undefined,
+          provider: providerField,
           resumeSessionAt: effectiveResumeSessionAt,
           forkSession: effectiveForkSession,
           remoteConnectionId: remoteConnectionId || undefined,
@@ -1195,6 +1215,87 @@ export function HomePage() {
             )}
           </div>
 
+          {/* Provider selector (Claude only, hidden for Codex) */}
+          {backend === "claude" && availableProviders.length > 0 && (
+            <div className="relative" ref={providerDropdownRef}>
+              <button
+                onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                aria-expanded={showProviderDropdown}
+                className={`flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-md transition-colors cursor-pointer ${
+                  selectedProvider
+                    ? "text-cc-primary bg-cc-primary/10 hover:bg-cc-primary/15"
+                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                }`}
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 opacity-70">
+                  <path d="M8 1v14M1 8h14" strokeLinecap="round" />
+                  <circle cx="8" cy="4" r="1.5" />
+                  <circle cx="8" cy="12" r="1.5" />
+                </svg>
+                <span>{activeProvider?.name || "Provider"}</span>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+                  <path d="M4 6l4 4 4-4" />
+                </svg>
+              </button>
+              {showProviderDropdown && (
+                <div className="absolute left-0 bottom-full mb-1 w-56 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1">
+                  <button
+                    onClick={() => {
+                      setSelectedProvider("");
+                      setSelectedProviderModel("");
+                      setShowProviderDropdown(false);
+                    }}
+                    className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
+                      !selectedProvider ? "text-cc-primary font-medium" : "text-cc-fg"
+                    }`}
+                  >
+                    None (default Anthropic)
+                  </button>
+                  {availableProviders.map((p) => (
+                    <button
+                      key={p.slug}
+                      onClick={() => {
+                        setSelectedProvider(p.slug);
+                        setSelectedProviderModel(p.models[0] || "");
+                        setShowProviderDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center justify-between ${
+                        p.slug === selectedProvider ? "text-cc-primary font-medium" : "text-cc-fg"
+                      }`}
+                    >
+                      <span>{p.name}</span>
+                      <span className="text-[10px] text-cc-muted">{p.models.length} model{p.models.length !== 1 ? "s" : ""}</span>
+                    </button>
+                  ))}
+                  <div className="border-t border-cc-border mt-1 pt-1">
+                    <button
+                      onClick={() => {
+                        setShowProviderManager(true);
+                        setShowProviderDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-xs text-left text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                    >
+                      Manage providers...
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Provider model selector (when a provider is selected) */}
+          {selectedProvider && activeProvider && activeProvider.models.length > 0 && (
+            <select
+              value={selectedProviderModel}
+              onChange={(e) => setSelectedProviderModel(e.target.value)}
+              className="px-2.5 py-2 text-xs text-cc-fg bg-transparent rounded-md hover:bg-cc-hover transition-colors cursor-pointer border-none outline-none"
+            >
+              {activeProvider.models.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
+
           {/* Branch from prior session (Claude only) */}
           {backend === "claude" && (
             <button
@@ -1486,6 +1587,15 @@ export function HomePage() {
           onClose={() => {
             setShowEnvManager(false);
             api.listEnvs().then(setEnvs).catch(() => {});
+          }}
+        />
+      )}
+      {showProviderManager && (
+        <ProviderManager
+          onClose={() => {
+            setShowProviderManager(false);
+            // Refresh backends to pick up any provider changes
+            api.getBackends().then(setBackends).catch(() => {});
           }}
         />
       )}
