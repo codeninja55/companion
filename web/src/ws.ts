@@ -2,6 +2,7 @@ import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, ProcessItem, ProcessStatus, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
+import { cleanStreamingThinkTags } from "./utils/think-tag-stream.js";
 
 const WS_RECONNECT_DELAY_MS = 2000;
 const sockets = new Map<string, WebSocket>();
@@ -10,6 +11,8 @@ const lastSeqBySession = new Map<string, number>();
 const taskCounters = new Map<string, number>();
 const streamingPhaseBySession = new Map<string, "thinking" | "text">();
 const streamingDraftMessageIdBySession = new Map<string, string>();
+/** Raw accumulated text_delta buffer for think-tag detection (keyed by sessionId) */
+const rawStreamingBuffer = new Map<string, string>();
 /** Track processed tool_use IDs to prevent duplicate task creation */
 const processedToolUseIds = new Map<string, Set<string>>();
 
@@ -498,6 +501,7 @@ function handleParsedMessage(
       }
       store.setStreaming(sessionId, null);
       streamingPhaseBySession.delete(sessionId);
+      rawStreamingBuffer.delete(sessionId);
       // Clear progress only for completed tools (tool_result blocks), not all tools.
       // Blanket clear would cause flickering during concurrent tool execution.
       if (msg.content?.length) {
@@ -530,6 +534,7 @@ function handleParsedMessage(
         // message_start → mark generation start time
         if (evt.type === "message_start") {
           streamingPhaseBySession.delete(sessionId);
+          rawStreamingBuffer.delete(sessionId);
           clearStreamingDraftMessage(sessionId);
           if (!store.streamingStartedAt.has(sessionId)) {
             store.setStreamingStats(sessionId, { startedAt: Date.now(), outputTokens: 0 });
@@ -540,16 +545,32 @@ function handleParsedMessage(
         if (evt.type === "content_block_delta") {
           const delta = evt.delta as Record<string, unknown> | undefined;
           if (delta?.type === "text_delta" && typeof delta.text === "string") {
-            let current = store.streaming.get(sessionId) || "";
-            const thinkingPrefix = "Thinking:\n";
-            const responsePrefix = "\n\nResponse:\n";
-            if (streamingPhaseBySession.get(sessionId) === "thinking" && !current.includes(responsePrefix)) {
-              current += responsePrefix;
+            // Accumulate raw text for think-tag detection
+            const rawAccumulated = (rawStreamingBuffer.get(sessionId) || "") + delta.text;
+            rawStreamingBuffer.set(sessionId, rawAccumulated);
+
+            // Detect <think> tags from local models (Qwen, DeepSeek)
+            if (rawAccumulated.includes("<think>")) {
+              const { display, isThinking } = cleanStreamingThinkTags(rawAccumulated);
+              if (isThinking) {
+                streamingPhaseBySession.set(sessionId, "thinking");
+              } else {
+                streamingPhaseBySession.set(sessionId, "text");
+              }
+              store.setStreaming(sessionId, display);
+              setStreamingDraftMessage(sessionId, display);
+            } else {
+              // Normal text path (no think tags) — original behavior
+              let current = store.streaming.get(sessionId) || "";
+              const responsePrefix = "\n\nResponse:\n";
+              if (streamingPhaseBySession.get(sessionId) === "thinking" && !current.includes(responsePrefix)) {
+                current += responsePrefix;
+              }
+              streamingPhaseBySession.set(sessionId, "text");
+              const nextText = current + delta.text;
+              store.setStreaming(sessionId, nextText);
+              setStreamingDraftMessage(sessionId, nextText);
             }
-            streamingPhaseBySession.set(sessionId, "text");
-            const nextText = current + delta.text;
-            store.setStreaming(sessionId, nextText);
-            setStreamingDraftMessage(sessionId, nextText);
           }
           if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
             const current = store.streaming.get(sessionId) || "";
@@ -608,6 +629,7 @@ function handleParsedMessage(
       clearStreamingDraftMessage(sessionId);
       store.setStreaming(sessionId, null);
       streamingPhaseBySession.delete(sessionId);
+      rawStreamingBuffer.delete(sessionId);
       store.setStreamingStats(sessionId, null);
       store.clearToolProgress(sessionId);
       store.setSessionStatus(sessionId, "idle");
@@ -886,6 +908,7 @@ function handleParsedMessage(
         clearStreamingDraftMessage(sessionId);
         store.setStreaming(sessionId, null);
         streamingPhaseBySession.delete(sessionId);
+        rawStreamingBuffer.delete(sessionId);
         store.setStreamingStats(sessionId, null);
         store.clearToolProgress(sessionId);
         store.setSessionStatus(sessionId, "idle");
@@ -978,6 +1001,7 @@ export function disconnectSession(sessionId: string) {
   pendingBackgroundBash.delete(sessionId);
   taskCounters.delete(sessionId);
   streamingPhaseBySession.delete(sessionId);
+  rawStreamingBuffer.delete(sessionId);
   streamingDraftMessageIdBySession.delete(sessionId);
   lastSeqBySession.delete(sessionId);
 }
