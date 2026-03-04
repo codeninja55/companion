@@ -223,6 +223,8 @@ export interface CreateSessionOpts {
   useWorktree?: boolean;
   backend?: "claude" | "codex";
   container?: ContainerCreateOpts;
+  /** Provider + model in "slug::model" format */
+  provider?: string;
   resumeSessionAt?: string;
   forkSession?: boolean;
 }
@@ -231,6 +233,7 @@ export interface BackendInfo {
   id: string;
   name: string;
   available: boolean;
+  providers?: Array<{ slug: string; name: string; models: string[] }>;
 }
 
 export interface BackendModelInfo {
@@ -310,6 +313,17 @@ export interface CompanionEnv {
   ports?: number[];
   volumes?: string[];
   initScript?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ModelProvider {
+  slug: string;
+  name: string;
+  baseUrl: string;
+  apiKey?: string;
+  models: string[];
+  maxContextTokens?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -835,6 +849,36 @@ export const api = {
     },
   ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
   deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),
+
+  // Providers
+  listProviders: () => get<ModelProvider[]>("/providers"),
+  getProvider: (slug: string) =>
+    get<ModelProvider>(`/providers/${encodeURIComponent(slug)}`),
+  createProvider: (data: {
+    name: string;
+    baseUrl: string;
+    apiKey?: string;
+    models?: string[];
+    maxContextTokens?: number;
+  }) => post<ModelProvider>("/providers", data),
+  updateProvider: (slug: string, data: {
+    name?: string;
+    baseUrl?: string;
+    apiKey?: string;
+    models?: string[];
+    maxContextTokens?: number;
+  }) => put<ModelProvider>(`/providers/${encodeURIComponent(slug)}`, data),
+  deleteProvider: (slug: string) =>
+    del(`/providers/${encodeURIComponent(slug)}`),
+  testProviderConnection: (slug: string) =>
+    post<{ ok: boolean; models: string[]; error?: string }>(
+      `/providers/${encodeURIComponent(slug)}/test`,
+    ),
+  testProviderConnectionDirect: (baseUrl: string, apiKey?: string) =>
+    post<{ ok: boolean; models: string[]; error?: string }>(
+      "/providers/test-connection",
+      { baseUrl, apiKey },
+    ),
 
   // Environment Docker builds
   buildEnvImage: (slug: string) =>

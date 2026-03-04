@@ -13,6 +13,7 @@ import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import type { TerminalManager } from "./terminal-manager.js";
 import * as envManager from "./env-manager.js";
+import * as providerManager from "./provider-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import * as sessionLinearIssues from "./session-linear-issues.js";
@@ -24,6 +25,7 @@ import { imagePullManager } from "./image-pull-manager.js";
 import { registerFsRoutes } from "./routes/fs-routes.js";
 import { registerSkillRoutes } from "./routes/skills-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
+import { registerProviderRoutes } from "./routes/provider-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
@@ -194,6 +196,25 @@ export function createRoutes(
         console.warn(
           `[routes] Environment "${body.envSlug}" not found, ignoring`,
         );
+      }
+
+      // Resolve provider env vars (format: "slug::model")
+      let providerSlug: string | undefined;
+      let providerModel: string | undefined;
+      if (typeof body.provider === "string" && body.provider.includes("::")) {
+        const parts = body.provider.split("::");
+        providerSlug = parts[0];
+        providerModel = parts[1] || undefined;
+        const providerEnv = providerManager.resolveProviderEnv(providerSlug!, providerModel);
+        if (providerEnv) {
+          console.log(
+            `[routes] Injecting provider "${providerSlug}" env vars:`,
+            Object.keys(providerEnv).join(", "),
+          );
+          envVars = { ...envVars, ...providerEnv };
+        } else {
+          console.warn(`[routes] Provider "${providerSlug}" not found, ignoring`);
+        }
       }
 
       // Resolve Docker image early so we know whether git ops should run on host or in container
@@ -413,6 +434,8 @@ export function createRoutes(
         containerName,
         containerImage,
         containerCwd: containerInfo?.containerCwd,
+        providerSlug,
+        providerModel,
         resumeSessionAt,
         forkSession,
       });
@@ -483,6 +506,19 @@ export function createRoutes(
         const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
         if (body.envSlug && companionEnv) {
           envVars = { ...companionEnv.variables, ...body.env };
+        }
+
+        // Resolve provider env vars (format: "slug::model")
+        let providerSlug: string | undefined;
+        let providerModel: string | undefined;
+        if (typeof body.provider === "string" && body.provider.includes("::")) {
+          const parts = body.provider.split("::");
+          providerSlug = parts[0];
+          providerModel = parts[1] || undefined;
+          const providerEnv = providerManager.resolveProviderEnv(providerSlug!, providerModel);
+          if (providerEnv) {
+            envVars = { ...envVars, ...providerEnv };
+          }
         }
 
         // Resolve Docker image early so we know whether git ops should run on host or in container
@@ -785,6 +821,8 @@ export function createRoutes(
           containerName,
           containerImage,
           containerCwd: containerInfo?.containerCwd,
+          providerSlug,
+          providerModel,
           resumeSessionAt,
           forkSession,
         });
@@ -1527,9 +1565,26 @@ export function createRoutes(
   // ─── Available backends ─────────────────────────────────────
 
   api.get("/backends", (c) => {
-    const backends: Array<{ id: string; name: string; available: boolean }> = [];
+    const backends: Array<{
+      id: string;
+      name: string;
+      available: boolean;
+      providers?: Array<{ slug: string; name: string; models: string[] }>;
+    }> = [];
 
-    backends.push({ id: "claude", name: "Claude Code", available: resolveBinary("claude") !== null });
+    const claudeAvailable = resolveBinary("claude") !== null;
+    const providers = providerManager.listProviders().map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      models: p.models,
+    }));
+
+    backends.push({
+      id: "claude",
+      name: "Claude Code",
+      available: claudeAvailable,
+      ...(providers.length > 0 ? { providers } : {}),
+    });
     backends.push({ id: "codex", name: "Codex", available: resolveBinary("codex") !== null });
 
     return c.json(backends);
@@ -1589,6 +1644,7 @@ export function createRoutes(
 
   registerFsRoutes(api);
   registerEnvRoutes(api, { webDir: WEB_DIR });
+  registerProviderRoutes(api);
 
   registerPromptRoutes(api);
   registerSettingsRoutes(api);
