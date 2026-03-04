@@ -59,7 +59,7 @@ function makeProvider(overrides: Record<string, unknown> = {}) {
 // ─── Setup ─────────────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mockListProviders.mockResolvedValue([makeProvider()]);
   mockCreateProvider.mockResolvedValue(makeProvider());
   mockUpdateProvider.mockResolvedValue(makeProvider());
