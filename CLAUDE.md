@@ -128,6 +128,40 @@ Each entry captures:
 
 Always use `agent-browser` CLI command to explore the browser. Never use playwright or other browser automation libraries.
 
+## Development Guidelines
+
+This document contains critical information about working with this codebase. Follow these guidelines precisely.
+
+### Writing code
+
+- CRITICAL: NEVER USE `--no-verify` WHEN COMMITTING CODE
+- We prefer simple, clean, maintainable solutions over clever or complex ones, even if the latter is more concise or performant. Readability and maintainability are primary concerns.
+- Make the smallest reasonable changes to get to the desired outcome. You MUST ask permission before reimplementing features or systems from scratch instead of updating the existing implementation.
+- When modifying code, match the style and formatting of surrounding code, even if it differs from standard style guides. Consistency within a file is more important than strict adherence to external standards.
+- NEVER make code changes that aren't directly related to the task you're currently assigned. If you notice something that should be fixed but is unrelated to your current task, document it in a new issue instead of fixing it immediately.
+- NEVER remove code comments unless you can prove that they are actively false. Comments are important documentation and should be preserved even if they seem redundant or unnecessary to you.
+- When writing comments, avoid referring to temporal context about refactoring or recent changes. Comments should be evergreen and describe the code as it is, not how it evolved or was recently changed.
+- When you are trying to fix a bug or compilation error or any other issue, YOU MUST NEVER throw away the old implementation and rewrite without explicit permission from me. If you are going to do this, YOU MUST STOP and get explicit permission from me.
+- NEVER name things as 'improved' or 'new' or 'enhanced,' etc. Code naming should be evergreen. What is "new" today will be "old" someday.
+
+### Coding Best Practices
+
+- **Early Returns**: Use to avoid nested conditions
+- **Descriptive Names**: Use clear variable/function names (prefix handlers with "handle")
+- **Constants Over Functions**: Use constants where possible
+- **DRY Code**: Don't repeat yourself
+- **Functional Style**: Prefer functional, immutable approaches when not verbose
+- **Minimal Changes**: Only modify code related to the task at hand
+- **Function Ordering**: Define composing functions before their components
+- **TODO Comments**: Mark issues in existing code with "TODO:" prefix
+- **Simplicity**: Prioritize simplicity and readability over clever solutions
+- **Build Iteratively** Start with minimal functionality and verify it works before adding complexity
+- **Run Tests**: Test your code frequently with realistic inputs and validate outputs
+- **Build Test Environments**: Create testing environments for components that are challenging and difficult to validate directly
+- **Functional Code**: Use functional and stateless approaches where they improve clarity
+- **Clean logic**: Keep core logic clean and push implementation details to the edges
+- **File Organisation**: Balance file organization with simplicity - use an appropriate number of files for the project scale
+
 ## Pull Requests
 
 When submitting a pull request:
@@ -185,3 +219,45 @@ gh pr edit --body-file /tmp/pr_body.md
 ## Codex & Claude Code
 - All features must be compatible with both Codex and Claude Code. If a feature is only compatible with one, it must be gated behind a clear UI affordance (e.g. "This feature requires Claude Code") and the incompatible option should be hidden or disabled.
 - When implementing a new feature, always consider how it will work with both models and test with both if possible. If a feature is only implemented for one model, document that clearly in the code and in the UI.
+
+## Content Strategy
+
+- Document just enough for user success - not too much, not too little.
+- Prioritize accuracy and usability of information.
+- Make content evergreen when possible.
+- Search for existing information before adding new content.
+- Check existing patterns for consistency
+- Start by making the smallest reasonable changes.
+- When writing in Markdown, ensure the content does not exceed 120 characters per line.
+
+## Writing standards
+
+- Second-person voice ("you")
+- Prerequisites at the start of procedural content.
+- Test all code examples before publishing.
+- Match style and formatting of existing pages.
+- Include both basic and advanced use cases.
+- Language tags on all code blocks.
+- Relative paths for internal links.
+- Use broadly applicable examples rather than overly specific business cases.
+- Lead with context when helpful, - explain what something is before diving into implementation detail.
+- Use sentence case for all headers ("Getting started" not "Getting Started").
+- Use sentence case for code block titles ("Expanded example" not "Expanded Example")
+- Prefer active voice and direct language.
+- Remove unnecessary words while maintaining clarity.
+- Break complex instructions into clear numbered steps.
+- Make language more precise and contextual.
+
+### Language and tone standards
+
+- Avoid promotional language. You are a technical writing assistant, not a marketer or marketing person. Never use phrases like "breathtaking" or "exceptional value."
+- Reduce conjunction overuse. Limit use of "moreover," "furthermore," "additionally," "on the other hand," and "consequently." Favour direct, clear statements.
+- Avoid editorializing. Remove phrases like "it's important to note," "this article will," "in conclusion," or personal interpretations.
+- No undue emphasis. Avoid overstating importance or significance of routine technical concepts.
+
+### Technical accuracy standards
+
+- **VERIFY** all links. Every link, both internal and external, must be tested and functional before publication.
+- Maintain consistency. Use consistent terminology, formatting, and language variety throughout all documentation.
+- Valid technical references. Ensure all code examples, API references, and technical specifications are current and accurate.
+
