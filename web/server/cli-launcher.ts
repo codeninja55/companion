@@ -15,6 +15,7 @@ import type { RecorderManager } from "./recorder.js";
 import { CodexAdapter } from "./codex-adapter.js";
 import { resolveBinary, getEnrichedPath } from "./path-resolver.js";
 import { containerManager } from "./container-manager.js";
+import { resolveProviderEnv } from "./provider-manager.js";
 import {
   getLegacyCodexHome,
   resolveCompanionCodexSessionHome,
@@ -118,6 +119,12 @@ export interface SdkSessionInfo {
   /** Full WebSocket URL for the Codex app-server. */
   codexWsUrl?: string;
 
+  // Provider fields
+  /** Provider slug used for this session */
+  providerSlug?: string;
+  /** Model selected from the provider */
+  providerModel?: string;
+
   // Container fields
   /** Docker container ID when session runs inside a container */
   containerId?: string;
@@ -144,6 +151,10 @@ export interface LaunchOptions {
   codexInternetAccess?: boolean;
   /** Optional override for CODEX_HOME used by Codex sessions. */
   codexHome?: string;
+  /** Provider slug — used to re-resolve env vars on relaunch */
+  providerSlug?: string;
+  /** Provider model — used to re-resolve env vars on relaunch */
+  providerModel?: string;
   /** Docker container ID — when set, CLI runs inside container via docker exec */
   containerId?: string;
   /** Docker container name */
@@ -296,6 +307,12 @@ export class CliLauncher {
       info.containerCwd = options.containerCwd || "/workspace";
     }
 
+    // Store provider metadata (slug only — secrets resolved at runtime)
+    if (options.providerSlug) {
+      info.providerSlug = options.providerSlug;
+      info.providerModel = options.providerModel;
+    }
+
     this.sessions.set(sessionId, info);
     if (options.env) {
       this.sessionEnvs.set(sessionId, { ...options.env });
@@ -394,7 +411,15 @@ export class CliLauncher {
 
     info.state = "starting";
 
-    const runtimeEnv = this.sessionEnvs.get(sessionId);
+    // Re-resolve provider env vars on relaunch (secrets not persisted)
+    let runtimeEnv = this.sessionEnvs.get(sessionId);
+    if (info.providerSlug) {
+      const providerEnv = resolveProviderEnv(info.providerSlug, info.providerModel);
+      if (providerEnv) {
+        runtimeEnv = { ...runtimeEnv, ...providerEnv };
+        this.sessionEnvs.set(sessionId, runtimeEnv);
+      }
+    }
 
     if (info.backendType === "codex") {
       this.spawnCodex(sessionId, info, {
