@@ -21,6 +21,7 @@ import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
 import { ProviderManager } from "./ProviderManager.js";
 import { FolderPicker } from "./FolderPicker.js";
+import { RemoteConnect } from "./RemoteConnect.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { LinearSection } from "./home/LinearSection.js";
 import { BranchPicker } from "./home/BranchPicker.js";
@@ -138,6 +139,9 @@ export function HomePage() {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showRemoteConnect, setShowRemoteConnect] = useState(false);
+  const [remoteConnectionId, setRemoteConnectionId] = useState<string | null>(null);
+  const [remoteCwd, setRemoteCwd] = useState<string | null>(null);
   const [showBranchingControls, setShowBranchingControls] = useState(false);
   const [resumeSessionAt, setResumeSessionAt] = useState("");
   const [forkSession, setForkSession] = useState(true);
@@ -649,6 +653,8 @@ export function HomePage() {
           provider: providerField,
           resumeSessionAt: effectiveResumeSessionAt,
           forkSession: effectiveForkSession,
+          remoteConnectionId: remoteConnectionId || undefined,
+          remoteCwd: remoteCwd || undefined,
         },
         (progress) => {
           useStore.getState().addCreationProgress(progress);
@@ -1031,11 +1037,52 @@ export function HomePage() {
             {showFolderPicker && (
               <FolderPicker
                 initialPath={cwd || ""}
-                onSelect={(path) => { setCwd(path); }}
+                onSelect={(path) => { setCwd(path); setRemoteConnectionId(null); setRemoteCwd(null); }}
                 onClose={() => setShowFolderPicker(false)}
               />
             )}
           </div>
+
+          {/* Remote SSH button — hidden for Codex */}
+          {backend !== "codex" && (
+            <div>
+              {remoteConnectionId ? (
+                <button
+                  onClick={() => { setRemoteConnectionId(null); setRemoteCwd(null); }}
+                  className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-green-400 hover:text-green-300 rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
+                  data-testid="remote-active-btn"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zm3.78 4.22a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06 0l-2-2a.75.75 0 011.06-1.06L7 7.94l3.72-3.72a.75.75 0 011.06 0z" />
+                  </svg>
+                  <span className="max-w-[120px] truncate font-mono-code">
+                    Remote: {remoteCwd || "~"}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowRemoteConnect(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
+                  data-testid="remote-btn"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+                    <path d="M0 2.5A1.5 1.5 0 011.5 1h5.879a1.5 1.5 0 011.06.44l.44.44H14.5A1.5 1.5 0 0116 3.38v1.12H0V2.5zM16 6H0v7.5A1.5 1.5 0 001.5 15h13a1.5 1.5 0 001.5-1.5V6zM5 10.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5z" />
+                  </svg>
+                  Remote
+                </button>
+              )}
+              {showRemoteConnect && (
+                <RemoteConnect
+                  onClose={() => setShowRemoteConnect(false)}
+                  onSessionStart={(connId, cwdPath) => {
+                    setRemoteConnectionId(connId);
+                    setRemoteCwd(cwdPath);
+                    setShowRemoteConnect(false);
+                  }}
+                />
+              )}
+            </div>
+          )}
 
           {/* Branch picker + worktree toggle */}
           <BranchPicker

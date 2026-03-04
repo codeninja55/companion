@@ -105,4 +105,30 @@ export interface SdkSessionInfo {
   agentId?: string;
   /** Human-readable name of the agent that spawned this session */
   agentName?: string;
+  /** Remote SSH connection ID for this session */
+  remoteConnectionId?: string;
+  /** Working directory on the remote machine */
+  remoteCwd?: string;
+}
+
+// ─── Remote SSH Types ─────────────────────────────────────────────────────
+
+export interface RemoteProfile {
+  slug: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: "key" | "password";
+  keyPath?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RemoteConnection {
+  id: string;
+  profileSlug: string;
+  status: "connecting" | "connected" | "disconnected" | "error";
+  tunnelPort: number;
+  error?: string;
 }

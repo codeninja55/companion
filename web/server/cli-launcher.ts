@@ -20,6 +20,8 @@ import {
   getLegacyCodexHome,
   resolveCompanionCodexSessionHome,
 } from "./codex-home.js";
+import * as sshManager from "./ssh-manager.js";
+import * as profileManager from "./remote-profile-manager.js";
 
 /** Whether WebSocket transport is enabled for Codex sessions. */
 function isCodexWsTransportEnabled(): boolean {
@@ -119,6 +121,11 @@ export interface SdkSessionInfo {
   /** Full WebSocket URL for the Codex app-server. */
   codexWsUrl?: string;
 
+  // Remote SSH fields
+  /** Remote SSH connection ID for this session */
+  remoteConnectionId?: string;
+  /** Working directory on the remote machine */
+  remoteCwd?: string;
   // Provider fields
   /** Provider slug used for this session */
   providerSlug?: string;
@@ -151,6 +158,10 @@ export interface LaunchOptions {
   codexInternetAccess?: boolean;
   /** Optional override for CODEX_HOME used by Codex sessions. */
   codexHome?: string;
+  /** Remote SSH connection ID — when set, CLI runs on remote via reverse tunnel */
+  remoteConnectionId?: string;
+  /** Working directory on the remote machine */
+  remoteCwd?: string;
   /** Provider slug — used to re-resolve env vars on relaunch */
   providerSlug?: string;
   /** Provider model — used to re-resolve env vars on relaunch */
@@ -299,6 +310,12 @@ export class CliLauncher {
       info.codexSandbox = options.codexSandbox;
     }
 
+    // Store remote SSH metadata if provided
+    if (options.remoteConnectionId) {
+      info.remoteConnectionId = options.remoteConnectionId;
+      info.remoteCwd = options.remoteCwd;
+    }
+
     // Store container metadata if provided
     if (options.containerId) {
       info.containerId = options.containerId;
@@ -318,7 +335,9 @@ export class CliLauncher {
       this.sessionEnvs.set(sessionId, { ...options.env });
     }
 
-    if (backendType === "codex") {
+    if (options.remoteConnectionId) {
+      this.spawnRemoteCLI(sessionId, info, options);
+    } else if (backendType === "codex") {
       this.spawnCodex(sessionId, info, options);
     } else {
       this.spawnCLI(sessionId, info, options);
@@ -421,7 +440,16 @@ export class CliLauncher {
       }
     }
 
-    if (info.backendType === "codex") {
+    if (info.remoteConnectionId) {
+      this.spawnRemoteCLI(sessionId, info, {
+        model: info.model,
+        permissionMode: info.permissionMode,
+        cwd: info.cwd,
+        remoteConnectionId: info.remoteConnectionId,
+        remoteCwd: info.remoteCwd,
+        env: runtimeEnv,
+      });
+    } else if (info.backendType === "codex") {
       this.spawnCodex(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
@@ -454,6 +482,74 @@ export class CliLauncher {
    */
   getStartingSessions(): SdkSessionInfo[] {
     return Array.from(this.sessions.values()).filter((s) => s.state === "starting");
+  }
+
+  /**
+   * Spawn Claude Code on a remote machine via SSH reverse tunnel.
+   * The remote CLI connects back to the local Companion server through the tunnel.
+   */
+  private spawnRemoteCLI(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): void {
+    const connId = options.remoteConnectionId;
+    if (!connId) {
+      console.error(`[cli-launcher] No remoteConnectionId for session ${sessionId}`);
+      info.state = "exited";
+      info.exitCode = 1;
+      this.persistState();
+      return;
+    }
+
+    const conn = sshManager.getConnection(connId);
+    if (!conn) {
+      console.error(`[cli-launcher] Remote connection ${connId} not found for session ${sessionId}`);
+      info.state = "exited";
+      info.exitCode = 1;
+      this.persistState();
+      return;
+    }
+
+    const profile = profileManager.getProfile(conn.profileSlug);
+    if (!profile) {
+      console.error(`[cli-launcher] Remote profile ${conn.profileSlug} not found for session ${sessionId}`);
+      info.state = "exited";
+      info.exitCode = 1;
+      this.persistState();
+      return;
+    }
+
+    const remoteCwd = options.remoteCwd || "~";
+    const spawnCmd = sshManager.buildRemoteLaunchCommand(conn, profile, sessionId, this.port, remoteCwd);
+
+    console.log(
+      `[cli-launcher] Spawning remote session ${sessionId} via SSH: ${sanitizeSpawnArgsForLog(spawnCmd)}`,
+    );
+
+    const proc = Bun.spawn(spawnCmd, {
+      env: { ...process.env, PATH: getEnrichedPath() },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    info.pid = proc.pid;
+    this.processes.set(sessionId, proc);
+    sshManager.trackProcess(connId, proc);
+
+    this.pipeOutput(sessionId, proc);
+
+    proc.exited.then((exitCode) => {
+      console.log(`[cli-launcher] Remote session ${sessionId} exited (code=${exitCode})`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = exitCode;
+      }
+      this.processes.delete(sessionId);
+      this.persistState();
+      for (const handler of this.exitHandlers) {
+        try { handler(sessionId, exitCode); } catch {}
+      }
+    });
+
+    this.persistState();
   }
 
   private spawnCLI(sessionId: string, info: SdkSessionInfo, options: LaunchOptions & { resumeSessionId?: string }): void {
