@@ -745,10 +745,14 @@ function handleParsedMessage(
 
     case "auth_status": {
       if (data.error) {
+        const isInvalidKey = data.error.toLowerCase().includes("invalid api key");
+        const hint = isInvalidKey
+          ? "\nHint: If you're using Claude Code OAuth, ensure ANTHROPIC_API_KEY is not set in your shell environment."
+          : "";
         store.appendMessage(sessionId, {
           id: nextId(),
           role: "system",
-          content: `Auth error: ${data.error}`,
+          content: `Auth error: ${data.error}${hint}`,
           timestamp: Date.now(),
         });
       }

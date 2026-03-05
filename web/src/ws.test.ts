@@ -1124,7 +1124,8 @@ describe("handleMessage: message_history", () => {
 // handleMessage: auth_status error
 // ===========================================================================
 describe("handleMessage: auth_status", () => {
-  it("appends a system message when there is an auth error", () => {
+  it("appends a system message with OAuth hint when error contains 'Invalid API key'", () => {
+    // The hint guides OAuth users who accidentally have ANTHROPIC_API_KEY set in their environment
     wsModule.connectSession("s1");
     fireMessage({ type: "session_init", session: makeSession("s1") });
 
@@ -1138,7 +1139,27 @@ describe("handleMessage: auth_status", () => {
     const msgs = useStore.getState().messages.get("s1")!;
     expect(msgs).toHaveLength(1);
     expect(msgs[0].role).toBe("system");
-    expect(msgs[0].content).toBe("Auth error: Invalid API key");
+    expect(msgs[0].content).toBe(
+      "Auth error: Invalid API key\nHint: If you're using Claude Code OAuth, ensure ANTHROPIC_API_KEY is not set in your shell environment.",
+    );
+  });
+
+  it("appends a plain system message for non-key auth errors (no hint)", () => {
+    // Only "invalid api key" errors get the OAuth hint; other errors are shown as-is
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "auth_status",
+      isAuthenticating: false,
+      output: [],
+      error: "Authentication failed",
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].role).toBe("system");
+    expect(msgs[0].content).toBe("Auth error: Authentication failed");
   });
 
   it("does not append a message when there is no error", () => {
