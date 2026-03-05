@@ -1,0 +1,26 @@
+services:
+  companion:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3456:3456"
+    volumes:
+      # Persists auth token, env profiles, and session recordings across restarts
+      - companion-data:/root/.companion
+      # Bind-mount host project directories so sessions can access your code.
+      # Replace /path/to/your/projects with an actual path, e.g.:
+      #   - ~/projects:/workspace
+      #   - .:/workspace
+      - /path/to/your/projects:/workspace
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Set a fixed token instead of auto-generating one on first start:
+      # - COMPANION_AUTH_TOKEN=your-token-here
+      # Override the default port:
+      # - PORT=3456
+    restart: unless-stopped
+
+volumes:
+  # Named volume for ~/.companion — survives container recreation
+  companion-data:

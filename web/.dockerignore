@@ -1,0 +1,30 @@
+# Build artefacts — regenerated during docker build
+node_modules/
+dist/
+coverage/
+
+# Version control
+.git/
+.gitignore
+
+# Docker build files (avoid recursive inclusion)
+docker/
+Dockerfile*
+.dockerignore
+
+# Tests — not needed in the image
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.ts
+
+# Documentation
+*.md
+docs/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
