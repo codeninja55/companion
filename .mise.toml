@@ -1,0 +1,63 @@
+[tools]
+node = "25.8.0"
+bun  = "1.3.10"
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+
+[tasks.install]
+run         = "cd web && bun install"
+description = "Install dependencies"
+
+# ── Development ───────────────────────────────────────────────────────────────
+
+[tasks.dev]
+run         = "cd web && bun run dev"
+description = "Start dev server (Hono on :3456 + Vite HMR on :5174)"
+
+[tasks."dev:api"]
+run         = "cd web && bun run dev:api"
+description = "Start API server only"
+
+[tasks."dev:vite"]
+run         = "cd web && bun run dev:vite"
+description = "Start Vite HMR only"
+
+# ── Build & serve ─────────────────────────────────────────────────────────────
+
+[tasks.build]
+run         = "cd web && bun run build"
+description = "Production build"
+
+[tasks.start]
+run         = "cd web && bun run start"
+description = "Serve production build"
+
+# ── Code quality ──────────────────────────────────────────────────────────────
+
+[tasks.typecheck]
+run         = "cd web && bun run typecheck"
+description = "TypeScript type check (tsc --noEmit)"
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+
+[tasks.test]
+run         = "cd web && bun run test"
+description = "Run test suite"
+
+[tasks."test:watch"]
+run         = "cd web && bun run test:watch"
+description = "Run tests in watch mode"
+
+[tasks."test:a11y"]
+run         = "cd web && bun run test:a11y"
+description = "Run accessibility tests"
+
+[tasks."test:codex-contract"]
+run         = "cd web && bun run test:codex-contract"
+description = "Run Codex contract tests"
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+
+[tasks.generate-token]
+run         = "cd web && bun run generate-token"
+description = "Show or regenerate the auth token"
