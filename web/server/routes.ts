@@ -439,7 +439,7 @@ export function createRoutes(
 
       const effectivePermissionMode = body.permissionMode || getSettings().defaultPermissionMode;
 
-      // Resolve additional directories from preset slug
+      // Resolve additional directories from preset slug and/or ad-hoc list
       let addDirs: string[] | undefined;
       if (body.addDirsSlug) {
         const preset = addDirsManager.getAddDirs(body.addDirsSlug);
@@ -448,6 +448,10 @@ export function createRoutes(
         } else {
           console.warn(`[routes] Add-dirs preset "${body.addDirsSlug}" not found, ignoring`);
         }
+      }
+      if (Array.isArray(body.addDirs) && body.addDirs.length > 0) {
+        const adHoc = body.addDirs.filter((d: unknown) => typeof d === "string" && d.trim());
+        addDirs = [...new Set([...(addDirs || []), ...adHoc])];
       }
 
       const session = launcher.launch({
@@ -852,7 +856,7 @@ export function createRoutes(
 
         const effectivePermissionMode = body.permissionMode || getSettings().defaultPermissionMode;
 
-        // Resolve additional directories from preset slug
+        // Resolve additional directories from preset slug and/or ad-hoc list
         let addDirs: string[] | undefined;
         if (body.addDirsSlug) {
           const preset = addDirsManager.getAddDirs(body.addDirsSlug);
@@ -861,6 +865,10 @@ export function createRoutes(
           } else {
             console.warn(`[routes] Add-dirs preset "${body.addDirsSlug}" not found, ignoring`);
           }
+        }
+        if (Array.isArray(body.addDirs) && body.addDirs.length > 0) {
+          const adHoc = body.addDirs.filter((d: unknown) => typeof d === "string" && d.trim());
+          addDirs = [...new Set([...(addDirs || []), ...adHoc])];
         }
 
         const session = launcher.launch({

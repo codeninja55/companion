@@ -22,6 +22,7 @@ import { EnvManager } from "./EnvManager.js";
 import { ProviderManager } from "./ProviderManager.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { RemoteConnect } from "./RemoteConnect.js";
+import { AddDirsModal } from "./AddDirsModal.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { LinearSection } from "./home/LinearSection.js";
 import { BranchPicker } from "./home/BranchPicker.js";
@@ -147,10 +148,9 @@ export function HomePage() {
   const [dangerAcknowledged, setDangerAcknowledged] = useState(false);
 
   // Additional directories state
-  const [addDirsPresets, setAddDirsPresets] = useState<Array<{ name: string; slug: string }>>([]);
   const [selectedAddDirsPreset, setSelectedAddDirsPreset] = useState("");
   const [additionalDirs, setAdditionalDirs] = useState<string[]>([]);
-  const [showAddDirsDropdown, setShowAddDirsDropdown] = useState(false);
+  const [showAddDirPicker, setShowAddDirPicker] = useState(false);
 
   // Dropdown states
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -230,7 +230,6 @@ export function HomePage() {
       }
     }).catch(() => {});
     fetch("/api/mcp-configs").then(r => r.json()).then(setMcpConfigs).catch(() => {});
-    fetch("/api/add-dirs").then(r => r.json()).then(setAddDirsPresets).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When backend changes, reset model and mode to defaults
@@ -680,6 +679,7 @@ export function HomePage() {
           mcpConfigSlug: selectedMcpConfig || undefined,
           allowDangerousPermissions: allowDangerousPermissions || undefined,
           addDirsSlug: selectedAddDirsPreset || undefined,
+          addDirs: additionalDirs.length > 0 ? additionalDirs : undefined,
         },
         (progress) => {
           useStore.getState().addCreationProgress(progress);
@@ -1402,64 +1402,33 @@ export function HomePage() {
             />
           </div>
 
-          {/* Additional directories selector */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                if (!showAddDirsDropdown) {
-                  fetch("/api/add-dirs").then(r => r.json()).then(setAddDirsPresets).catch(() => {});
-                }
-                setShowAddDirsDropdown(!showAddDirsDropdown);
+          {/* Additional directories button + modal */}
+          <button
+            onClick={() => setShowAddDirPicker(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-md transition-colors cursor-pointer ${
+              additionalDirs.length > 0
+                ? "text-cc-primary bg-cc-primary/10 hover:bg-cc-primary/15"
+                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+            }`}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
+              <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.354.146H13.5A1.5 1.5 0 0115 4.707V12.5A1.5 1.5 0 0113.5 14h-11A1.5 1.5 0 011 12.5v-9z" />
+            </svg>
+            <span className="max-w-[100px] truncate">
+              {additionalDirs.length > 0 ? `Dirs (${additionalDirs.length})` : "Add dirs"}
+            </span>
+          </button>
+          {showAddDirPicker && (
+            <AddDirsModal
+              directories={additionalDirs}
+              onChange={(dirs) => {
+                setAdditionalDirs(dirs);
+                setSelectedAddDirsPreset("");
               }}
-              aria-expanded={showAddDirsDropdown}
-              className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
-                <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.354.146H13.5A1.5 1.5 0 0115 4.707V12.5A1.5 1.5 0 0113.5 14h-11A1.5 1.5 0 011 12.5v-9z" />
-              </svg>
-              <span className="max-w-[100px] truncate">
-                {selectedAddDirsPreset
-                  ? addDirsPresets.find(p => p.slug === selectedAddDirsPreset)?.name || "Dirs"
-                  : "Add dirs"}
-              </span>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
-                <path d="M4 6l4 4 4-4" />
-              </svg>
-            </button>
-            {showAddDirsDropdown && (
-              <div className="absolute left-0 bottom-full mb-1 w-56 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1 overflow-hidden">
-                <button
-                  onClick={() => { setSelectedAddDirsPreset(""); setAdditionalDirs([]); setShowAddDirsDropdown(false); }}
-                  className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
-                    !selectedAddDirsPreset ? "text-cc-primary font-medium" : "text-cc-fg"
-                  }`}
-                >
-                  None
-                </button>
-                {addDirsPresets.map(p => (
-                  <button
-                    key={p.slug}
-                    onClick={async () => {
-                      setSelectedAddDirsPreset(p.slug);
-                      setShowAddDirsDropdown(false);
-                      try {
-                        const res = await fetch(`/api/add-dirs/${p.slug}`);
-                        if (res.ok) {
-                          const preset = await res.json();
-                          setAdditionalDirs(preset.directories || []);
-                        }
-                      } catch { /* ignore */ }
-                    }}
-                    className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
-                      p.slug === selectedAddDirsPreset ? "text-cc-primary font-medium" : "text-cc-fg"
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+              onClose={() => setShowAddDirPicker(false)}
+              initialPath={cwd || ""}
+            />
+          )}
 
           {/* Dangerous permissions toggle */}
           <button

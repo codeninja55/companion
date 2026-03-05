@@ -29,7 +29,7 @@ interface MockStoreState {
   openQuickTerminal: ReturnType<typeof vi.fn>;
   resetQuickTerminal: ReturnType<typeof vi.fn>;
   sessions: Map<string, { cwd?: string; is_containerized?: boolean }>;
-  sdkSessions: { sessionId: string; cwd?: string; containerId?: string; model?: string; backendType?: string }[];
+  sdkSessions: { sessionId: string; cwd?: string; containerId?: string; model?: string; backendType?: string; allowDangerousPermissions?: boolean }[];
   gitChangedFilesCount: Map<string, number>;
   sessionProcesses: Map<string, { status: string }[]>;
 }
@@ -227,6 +227,25 @@ describe("TopBar", () => {
 
     fireEvent.keyDown(window, { key: "j", metaKey: true });
     expect(storeState.setActiveTab).toHaveBeenCalledWith("editor");
+  });
+
+  it("shows UNSAFE badge when session has allowDangerousPermissions", () => {
+    // When the sdkSession has allowDangerousPermissions: true, the UNSAFE
+    // badge should be visible next to the Session tab text.
+    resetStore({
+      sdkSessions: [{ sessionId: "s1", cwd: "/repo", allowDangerousPermissions: true }],
+    });
+    render(<TopBar />);
+    expect(screen.getByText("UNSAFE")).toBeInTheDocument();
+  });
+
+  it("hides UNSAFE badge when session does not have dangerous permissions", () => {
+    // Without allowDangerousPermissions, no UNSAFE badge should appear
+    resetStore({
+      sdkSessions: [{ sessionId: "s1", cwd: "/repo" }],
+    });
+    render(<TopBar />);
+    expect(screen.queryByText("UNSAFE")).not.toBeInTheDocument();
   });
 
   it("passes axe accessibility checks", async () => {

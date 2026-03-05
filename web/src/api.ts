@@ -235,6 +235,8 @@ export interface CreateSessionOpts {
   allowDangerousPermissions?: boolean;
   /** Additional directories preset slug */
   addDirsSlug?: string;
+  /** Ad-hoc additional directories (overrides/merges with preset) */
+  addDirs?: string[];
 }
 
 export interface BackendInfo {
