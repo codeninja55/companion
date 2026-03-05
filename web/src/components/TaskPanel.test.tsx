@@ -1098,6 +1098,138 @@ describe("UsageLimitsSection (Claude Code sessions)", () => {
   });
 });
 
+describe("ClaudeTokenDetailsSection (Claude Code sessions)", () => {
+  it("renders cost and turns when available", () => {
+    // When a Claude session has cost/turns data, the section should display them
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0.1234,
+        num_turns: 5,
+        context_used_percent: 0,
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    expect(screen.getByText("Session")).toBeInTheDocument();
+    expect(screen.getByText(/5 turns/)).toBeInTheDocument();
+    expect(screen.getByText(/\$0\.1234/)).toBeInTheDocument();
+  });
+
+  it("renders singular 'turn' for 1 turn", () => {
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0,
+        num_turns: 1,
+        context_used_percent: 0,
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    expect(screen.getByText(/1 turn$/)).toBeInTheDocument();
+  });
+
+  it("renders token breakdown when claude_token_details is present", () => {
+    // When modelUsage populates claude_token_details, token counts should appear
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0.05,
+        num_turns: 3,
+        context_used_percent: 42,
+        claude_token_details: {
+          inputTokens: 15_000,
+          outputTokens: 3_200,
+          cacheReadInputTokens: 8_000,
+          cacheCreationInputTokens: 0,
+          contextWindow: 200_000,
+        },
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    expect(screen.getByText("Input")).toBeInTheDocument();
+    expect(screen.getByText("Output")).toBeInTheDocument();
+    expect(screen.getByText("Cache Read")).toBeInTheDocument();
+    // cacheCreationInputTokens is 0 so "Cache Write" should not render
+    expect(screen.queryByText("Cache Write")).not.toBeInTheDocument();
+    // Context bar should render (use getAllByText since the panel header also says "Context")
+    expect(screen.getAllByText("Context").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("42%")).toBeInTheDocument();
+  });
+
+  it("hides cache rows when counts are zero", () => {
+    // Both cache fields zero → no cache rows shown
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0.01,
+        num_turns: 1,
+        context_used_percent: 10,
+        claude_token_details: {
+          inputTokens: 5_000,
+          outputTokens: 1_000,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          contextWindow: 200_000,
+        },
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    expect(screen.queryByText("Cache Read")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cache Write")).not.toBeInTheDocument();
+  });
+
+  it("renders nothing when cost is 0, turns is 0, and no token details", () => {
+    // A fresh session with no data should render no session section
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0,
+        num_turns: 0,
+        context_used_percent: 0,
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    expect(screen.queryByText("Session")).not.toBeInTheDocument();
+  });
+
+  it("hides context bar when contextWindow is 0", () => {
+    // Without context window info, the context bar should not appear
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0.01,
+        num_turns: 2,
+        context_used_percent: 0,
+        claude_token_details: {
+          inputTokens: 1_000,
+          outputTokens: 500,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          contextWindow: 0,
+        },
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    // Only the panel header "Context" should exist, not a context bar label
+    const contextElements = screen.getAllByText("Context");
+    expect(contextElements).toHaveLength(1); // just the panel header
+  });
+
+  it("does not render for Codex sessions", () => {
+    // ClaudeTokenDetailsSection is only in UsageLimitsRenderer for claude backend
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "codex",
+        total_cost_usd: 0.05,
+        num_turns: 3,
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    // Codex sessions show CodexTokenDetailsSection, not ClaudeTokenDetailsSection
+    expect(screen.queryByText("Session")).not.toBeInTheDocument();
+  });
+});
+
 describe("LinearIssueSection", () => {
   const mockLinearIssue = {
     id: "issue-1",
