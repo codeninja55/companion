@@ -61,7 +61,14 @@ export function handleSessionSubscribe(
     return;
   }
 
-  const missed = session.eventBuffer.filter((evt) => evt.seq > lastAckSeq);
+  // Filter out history-backed events (assistant, result, user_message, etc.)
+  // since the browser already received them via the message_history payload
+  // sent in handleBrowserOpen. Replaying them would create duplicate messages
+  // (e.g. stream_event creates a draft, then assistant finalizes it with an ID
+  // that already exists from the history → duplicate React keys).
+  const missed = session.eventBuffer.filter(
+    (evt) => evt.seq > lastAckSeq && !isHistoryBackedEvent(evt.message),
+  );
   if (missed.length === 0) return;
   sendToBrowser(ws, {
     type: "event_replay",

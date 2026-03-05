@@ -288,8 +288,17 @@ function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMess
     return false;
   }
 
-  const messages = [...existing];
+  // Replace draft with the final message, and remove any pre-existing
+  // message with the same ID to avoid duplicate React keys (can happen
+  // when event_replay replays events already covered by message_history).
+  let messages = [...existing];
   messages[draftIndex] = finalMessage;
+  const duplicateIndex = messages.findIndex(
+    (m, i) => i !== draftIndex && m.id === finalMessage.id,
+  );
+  if (duplicateIndex !== -1) {
+    messages.splice(duplicateIndex, 1);
+  }
   store.setMessages(sessionId, messages);
   streamingDraftMessageIdBySession.delete(sessionId);
   return true;
