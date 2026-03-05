@@ -336,6 +336,14 @@ export interface SessionState {
   git_behind: number;
   total_lines_added: number;
   total_lines_removed: number;
+  // Claude Code token details (aggregated from result messages)
+  claude_token_details?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    contextWindow: number;
+  };
   // Codex-specific token details (forwarded from thread/tokenUsage/updated)
   codex_token_details?: {
     inputTokens: number;

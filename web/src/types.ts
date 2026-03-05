@@ -109,6 +109,12 @@ export interface SdkSessionInfo {
   remoteConnectionId?: string;
   /** Working directory on the remote machine */
   remoteCwd?: string;
+  /** MCP config preset slug */
+  mcpConfigSlug?: string;
+  /** Whether dangerous permission bypass is enabled */
+  allowDangerousPermissions?: boolean;
+  /** Additional directories preset slug */
+  addDirsSlug?: string;
 }
 
 // ─── Remote SSH Types ─────────────────────────────────────────────────────

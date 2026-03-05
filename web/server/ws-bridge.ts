@@ -814,16 +814,33 @@ export class WsBridge {
       session.state.total_lines_removed = msg.total_lines_removed;
     }
 
-    // Compute context usage from modelUsage
+    // Aggregate token details from modelUsage (per-model breakdown → single total)
     if (msg.modelUsage) {
+      let totalInput = 0;
+      let totalOutput = 0;
+      let totalCacheRead = 0;
+      let totalCacheCreation = 0;
+      let contextWindow = 0;
       for (const usage of Object.values(msg.modelUsage)) {
+        totalInput += usage.inputTokens;
+        totalOutput += usage.outputTokens;
+        totalCacheRead += usage.cacheReadInputTokens;
+        totalCacheCreation += usage.cacheCreationInputTokens;
         if (usage.contextWindow > 0) {
+          contextWindow = Math.max(contextWindow, usage.contextWindow);
           const pct = Math.round(
             ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
           );
           session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
         }
       }
+      session.state.claude_token_details = {
+        inputTokens: totalInput,
+        outputTokens: totalOutput,
+        cacheReadInputTokens: totalCacheRead,
+        cacheCreationInputTokens: totalCacheCreation,
+        contextWindow,
+      };
     }
 
     // Enrich thinking-only assistant messages with the result text so there's visible content.

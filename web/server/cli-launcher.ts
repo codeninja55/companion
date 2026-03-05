@@ -22,6 +22,7 @@ import {
 } from "./codex-home.js";
 import * as sshManager from "./ssh-manager.js";
 import * as profileManager from "./remote-profile-manager.js";
+import { getMcpConfigFilePath, getMcpConfig } from "./mcp-config-manager.js";
 
 /** Whether WebSocket transport is enabled for Codex sessions. */
 function isCodexWsTransportEnabled(): boolean {
@@ -132,6 +133,14 @@ export interface SdkSessionInfo {
   /** Model selected from the provider */
   providerModel?: string;
 
+  // MCP config and additional directories
+  /** MCP config preset slug — passed as --mcp-config to Claude Code */
+  mcpConfigSlug?: string;
+  /** Whether dangerous permission bypass is enabled */
+  allowDangerousPermissions?: boolean;
+  /** Additional directories preset slug */
+  addDirsSlug?: string;
+
   // Container fields
   /** Docker container ID when session runs inside a container */
   containerId?: string;
@@ -178,6 +187,12 @@ export interface LaunchOptions {
   resumeSessionAt?: string;
   /** Fork a new Claude session when resuming from prior context. */
   forkSession?: boolean;
+  /** MCP config preset slug — resolved to file path for --mcp-config */
+  mcpConfigSlug?: string;
+  /** Enable dangerous permission bypass flag */
+  allowDangerousPermissions?: boolean;
+  /** Additional directories to pass as --add-dir */
+  addDirs?: string[];
 }
 
 /**
@@ -626,6 +641,22 @@ export class CliLauncher {
     if (options.forkSession) {
       args.push("--fork-session");
     }
+    if (options.mcpConfigSlug) {
+      const configPath = getMcpConfigFilePath(options.mcpConfigSlug);
+      if (existsSync(configPath)) {
+        args.push("--mcp-config", configPath);
+      } else {
+        console.warn(`[cli-launcher] MCP config file not found: ${configPath}`);
+      }
+    }
+    if (options.allowDangerousPermissions) {
+      args.push("--allow-dangerously-skip-permissions");
+    }
+    if (options.addDirs) {
+      for (const dir of options.addDirs) {
+        args.push("--add-dir", dir);
+      }
+    }
 
     // Always pass -p "" for headless mode. When relaunching, also pass --resume
     // to restore the CLI's conversation context.
@@ -832,6 +863,14 @@ export class CliLauncher {
     args.push("--enable", "multi_agent");
     const internetEnabled = options.codexInternetAccess !== false;
     args.push("-c", `tools.webSearch=${internetEnabled ? "true" : "false"}`);
+    if (options.allowDangerousPermissions) {
+      args.push("--dangerously-bypass-approvals-and-sandbox");
+    }
+    if (options.addDirs) {
+      for (const dir of options.addDirs) {
+        args.push("--add-dir", dir);
+      }
+    }
     const codexHome = resolveCompanionCodexSessionHome(
       sessionId,
       options.codexHome,
@@ -947,6 +986,7 @@ export class CliLauncher {
       threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
       recorder: this.recorder ?? undefined,
+      mcpConfigSlug: options.mcpConfigSlug,
       killProcess: async () => {
         try {
           proxyProc.kill("SIGTERM");
@@ -1147,6 +1187,7 @@ export class CliLauncher {
       threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
       recorder: this.recorder ?? undefined,
+      mcpConfigSlug: options.mcpConfigSlug,
     });
 
     // Handle init errors — mark session as exited so UI shows failure.

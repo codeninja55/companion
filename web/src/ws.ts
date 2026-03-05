@@ -1,5 +1,5 @@
 import { useStore } from "./store.js";
-import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, ProcessItem, ProcessStatus, SdkSessionInfo, McpServerConfig } from "./types.js";
+import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, ProcessItem, ProcessStatus, SdkSessionInfo, McpServerConfig, SessionState } from "./types.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 import { cleanStreamingThinkTags } from "./utils/think-tag-stream.js";
@@ -612,7 +612,7 @@ function handleParsedMessage(
       processedToolUseIds.delete(sessionId);
 
       const r = data.data;
-      const sessionUpdates: Partial<{ total_cost_usd: number; num_turns: number; context_used_percent: number; total_lines_added: number; total_lines_removed: number }> = {
+      const sessionUpdates: Partial<SessionState> = {
         total_cost_usd: r.total_cost_usd,
         num_turns: r.num_turns,
       };
@@ -623,16 +623,33 @@ function handleParsedMessage(
       if (typeof r.total_lines_removed === "number") {
         sessionUpdates.total_lines_removed = r.total_lines_removed;
       }
-      // Compute context % from modelUsage if available
+      // Aggregate token details from modelUsage
       if (r.modelUsage) {
+        let totalInput = 0;
+        let totalOutput = 0;
+        let totalCacheRead = 0;
+        let totalCacheCreation = 0;
+        let contextWindow = 0;
         for (const usage of Object.values(r.modelUsage)) {
+          totalInput += usage.inputTokens;
+          totalOutput += usage.outputTokens;
+          totalCacheRead += usage.cacheReadInputTokens;
+          totalCacheCreation += usage.cacheCreationInputTokens;
           if (usage.contextWindow > 0) {
+            contextWindow = Math.max(contextWindow, usage.contextWindow);
             const pct = Math.round(
               ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
             );
             sessionUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
           }
         }
+        sessionUpdates.claude_token_details = {
+          inputTokens: totalInput,
+          outputTokens: totalOutput,
+          cacheReadInputTokens: totalCacheRead,
+          cacheCreationInputTokens: totalCacheCreation,
+          contextWindow,
+        };
       }
       store.updateSession(sessionId, sessionUpdates);
       clearStreamingDraftMessage(sessionId);
@@ -857,7 +874,7 @@ function handleParsedMessage(
             });
           }
           // Track cost/turns from history result, same as the live result handler
-          const resultUpdates: Partial<{ total_cost_usd: number; num_turns: number; context_used_percent: number; total_lines_added: number; total_lines_removed: number }> = {
+          const resultUpdates: Partial<SessionState> = {
             total_cost_usd: r.total_cost_usd,
             num_turns: r.num_turns,
           };
@@ -868,13 +885,29 @@ function handleParsedMessage(
             resultUpdates.total_lines_removed = r.total_lines_removed;
           }
           if (r.modelUsage) {
+            let totalInput = 0;
+            let totalOutput = 0;
+            let totalCacheRead = 0;
+            let totalCacheCreation = 0;
+            let contextWindow = 0;
             for (const usage of Object.values(r.modelUsage)) {
-              if ((usage as { contextWindow: number; inputTokens: number; outputTokens: number }).contextWindow > 0) {
-                const u = usage as { contextWindow: number; inputTokens: number; outputTokens: number };
-                const pct = Math.round(((u.inputTokens + u.outputTokens) / u.contextWindow) * 100);
+              totalInput += usage.inputTokens;
+              totalOutput += usage.outputTokens;
+              totalCacheRead += usage.cacheReadInputTokens;
+              totalCacheCreation += usage.cacheCreationInputTokens;
+              if (usage.contextWindow > 0) {
+                contextWindow = Math.max(contextWindow, usage.contextWindow);
+                const pct = Math.round(((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100);
                 resultUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
               }
             }
+            resultUpdates.claude_token_details = {
+              inputTokens: totalInput,
+              outputTokens: totalOutput,
+              cacheReadInputTokens: totalCacheRead,
+              cacheCreationInputTokens: totalCacheCreation,
+              contextWindow,
+            };
           }
           store.updateSession(sessionId, resultUpdates);
         } else if (histMsg.type === "system_event") {

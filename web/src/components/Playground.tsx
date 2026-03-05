@@ -13,6 +13,7 @@ import { useStore } from "../store.js";
 import { navigateToSession, navigateHome } from "../utils/routing.js";
 import { UpdateBanner } from "./UpdateBanner.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
+import { AgentProgressPanel } from "./AgentProgressPanel.js";
 import { ChatView } from "./ChatView.js";
 import { api } from "../api.js";
 import type {
@@ -2539,6 +2540,61 @@ export function Playground() {
             </Card>
           </div>
         </Section>
+        {/* ─── Agent Progress Panel ──────────────────────────── */}
+        <Section
+          title="Agent Progress Panel"
+          description="Inline sub-agent status shown in TaskPanel — filters for Agent/Task tools from toolProgress"
+        >
+          <div className="space-y-4 max-w-3xl">
+            <Card label="With active sub-agents (Agent + Task, Bash filtered out)">
+              <PlaygroundAgentProgress />
+            </Card>
+          </div>
+        </Section>
+        {/* ─── Dangerous Permissions Indicator ─────────────────── */}
+        <Section
+          title="Dangerous Permissions Indicator"
+          description="UNSAFE badge shown in session TopBar tab when allowDangerousPermissions is true"
+        >
+          <div className="space-y-4 max-w-3xl">
+            <Card label="Session tab with dangerous permissions badge">
+              <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium text-cc-fg border-b-[1.5px] border-cc-primary">
+                <span className="w-1.5 h-1.5 rounded-full bg-cc-primary" />
+                Session
+                <span className="text-[9px] rounded-full min-w-[15px] h-[15px] px-1.5 flex items-center justify-center font-semibold leading-none bg-red-500/15 text-red-400">
+                  UNSAFE
+                </span>
+              </div>
+            </Card>
+            <Card label="Session tab without dangerous permissions (normal)">
+              <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium text-cc-fg border-b-[1.5px] border-cc-primary">
+                <span className="w-1.5 h-1.5 rounded-full bg-cc-primary" />
+                Session
+              </div>
+            </Card>
+            <Card label="Dangerous permissions toggle (enabled)">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-md text-red-400 bg-red-500/10 hover:bg-red-500/15 transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13a1.02 1.02 0 00.886 1.5h13.95A1.02 1.02 0 0015.86 13L8.893 1.5zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z" />
+                </svg>
+                <span>Unsafe</span>
+              </button>
+            </Card>
+            <Card label="Dangerous permissions toggle (disabled)">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13a1.02 1.02 0 00.886 1.5h13.95A1.02 1.02 0 0015.86 13L8.893 1.5zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z" />
+                </svg>
+              </button>
+            </Card>
+          </div>
+        </Section>
         {/* ─── Session Items ──────────────────────────────────── */}
         <Section
           title="Session Items"
@@ -2549,6 +2605,36 @@ export function Playground() {
       </div>
     </div>
   );
+}
+
+// ─── Agent Progress Playground ───────────────────────────────────────────────
+
+function PlaygroundAgentProgress() {
+  // Set up store state synchronously before first render to avoid
+  // infinite-loop from useSyncExternalStore snapshot instability.
+  useState(() => {
+    const s = useStore.getState();
+    s.setToolProgress(PLAYGROUND_AGENT_SESSION, "tool-1", {
+      toolName: "Agent",
+      elapsedSeconds: 125,
+    });
+    s.setToolProgress(PLAYGROUND_AGENT_SESSION, "tool-2", {
+      toolName: "Task",
+      elapsedSeconds: 42,
+    });
+    s.setToolProgress(PLAYGROUND_AGENT_SESSION, "tool-3", {
+      toolName: "Bash",
+      elapsedSeconds: 10,
+    });
+  });
+
+  useEffect(() => {
+    return () => {
+      useStore.getState().clearToolProgress(PLAYGROUND_AGENT_SESSION);
+    };
+  }, []);
+
+  return <AgentProgressPanel sessionId={PLAYGROUND_AGENT_SESSION} />;
 }
 
 // ─── Session Item Playground ─────────────────────────────────────────────────
@@ -3447,6 +3533,7 @@ function TaskRow({ task }: { task: TaskItem }) {
 
 // ─── Inline AiValidationToggle playground wrapper ───────────────────────────
 
+const PLAYGROUND_AGENT_SESSION = "playground-agents";
 const PLAYGROUND_AI_VALIDATION_SESSION = "ai-validation-playground";
 
 function PlaygroundAiValidationToggle({ enabled }: { enabled: boolean }) {

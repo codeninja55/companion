@@ -23,6 +23,8 @@ const CATEGORIES = [
   { id: "updates", label: "Updates" },
   { id: "telemetry", label: "Telemetry" },
   { id: "environments", label: "Environments" },
+  { id: "mcp-configs", label: "MCP Configs" },
+  { id: "directory-presets", label: "Directory Presets" },
 ] as const;
 
 type CategoryId = (typeof CATEGORIES)[number]["id"];
@@ -62,6 +64,14 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [aiValidationEnabled, setAiValidationEnabled] = useState(false);
   const [aiValidationAutoApprove, setAiValidationAutoApprove] = useState(true);
   const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(true);
+  const [defaultPermissionMode, setDefaultPermissionMode] = useState("plan");
+  const [mcpConfigs, setMcpConfigs] = useState<Array<{ name: string; slug: string; config?: Record<string, unknown>; createdAt?: number }>>([]);
+  const [mcpPreviewSlug, setMcpPreviewSlug] = useState<string | null>(null);
+  const [mcpPreviewData, setMcpPreviewData] = useState<Record<string, unknown> | null>(null);
+  const [addDirsPresets, setAddDirsPresets] = useState<Array<{ name: string; slug: string; directories: string[]; createdAt?: number }>>([]);
+  const [editingDirsPreset, setEditingDirsPreset] = useState<string | null>(null);
+  const [editingDirsName, setEditingDirsName] = useState("");
+  const [editingDirsList, setEditingDirsList] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -134,12 +144,17 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         if (typeof s.aiValidationAutoApprove === "boolean") setAiValidationAutoApprove(s.aiValidationAutoApprove);
         if (typeof s.aiValidationAutoDeny === "boolean") setAiValidationAutoDeny(s.aiValidationAutoDeny);
         if (s.updateChannel === "stable" || s.updateChannel === "prerelease") setUpdateChannel(s.updateChannel);
+        if (s.defaultPermissionMode) setDefaultPermissionMode(s.defaultPermissionMode);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
 
     // Fetch auth token in parallel (non-blocking)
     api.getAuthToken().then((res) => setAuthToken(res.token)).catch(() => {});
+
+    // Fetch MCP configs and directory presets
+    fetch("/api/mcp-configs").then(r => r.json()).then(setMcpConfigs).catch(() => {});
+    fetch("/api/add-dirs").then(r => r.json()).then(setAddDirsPresets).catch(() => {});
 
     // Sync push subscription state with browser
     if (pushSupported) {
@@ -350,6 +365,29 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </button>
                 <p className="text-xs text-cc-muted px-1">
                   Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
+                </p>
+
+                <div className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg">
+                  <span>Default permission mode</span>
+                  <select
+                    value={defaultPermissionMode}
+                    onChange={async (e) => {
+                      const value = e.target.value;
+                      setDefaultPermissionMode(value);
+                      try {
+                        await api.updateSettings({ defaultPermissionMode: value } as Record<string, unknown>);
+                      } catch { /* ignore */ }
+                    }}
+                    className="text-xs bg-transparent text-cc-fg border-none outline-none cursor-pointer"
+                  >
+                    <option value="plan">Plan</option>
+                    <option value="default">Default</option>
+                    <option value="acceptEdits">Accept edits</option>
+                    <option value="bypassPermissions">Bypass permissions</option>
+                  </select>
+                </div>
+                <p className="text-xs text-cc-muted px-1">
+                  The permission mode pre-selected when creating sessions. Can be overridden per session.
                 </p>
               </div>
             </section>
@@ -913,6 +951,224 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 >
                   Open Environments Page
                 </button>
+              </div>
+            </section>
+
+            {/* MCP Configs management */}
+            <section id="mcp-configs" ref={setSectionRef("mcp-configs")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">MCP Configs</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted">
+                  Manage saved MCP server configuration presets used when creating sessions.
+                </p>
+                {mcpConfigs.length === 0 ? (
+                  <p className="text-xs text-cc-muted italic">No MCP config presets saved yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {mcpConfigs.map((preset) => (
+                      <div key={preset.slug} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-cc-hover">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-cc-fg font-medium truncate">{preset.name}</div>
+                          <div className="text-[11px] text-cc-muted">
+                            {preset.config?.mcpServers
+                              ? `${Object.keys(preset.config.mcpServers as object).length} server(s)`
+                              : ""}
+                            {preset.createdAt && (
+                              <> &middot; {new Date(preset.createdAt).toLocaleDateString()}</>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (mcpPreviewSlug === preset.slug) {
+                              setMcpPreviewSlug(null);
+                              setMcpPreviewData(null);
+                            } else {
+                              try {
+                                const res = await fetch(`/api/mcp-configs/${preset.slug}`);
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  setMcpPreviewSlug(preset.slug);
+                                  setMcpPreviewData(data.config || null);
+                                }
+                              } catch { /* ignore */ }
+                            }
+                          }}
+                          className="text-[11px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer px-2 py-1 rounded hover:bg-cc-active"
+                        >
+                          {mcpPreviewSlug === preset.slug ? "Hide" : "Preview"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Delete MCP config "${preset.name}"?`)) return;
+                            try {
+                              await fetch(`/api/mcp-configs/${preset.slug}`, { method: "DELETE" });
+                              setMcpConfigs((prev) => prev.filter((p) => p.slug !== preset.slug));
+                              if (mcpPreviewSlug === preset.slug) {
+                                setMcpPreviewSlug(null);
+                                setMcpPreviewData(null);
+                              }
+                            } catch { /* ignore */ }
+                          }}
+                          className="text-[11px] text-red-400 hover:text-red-300 transition-colors cursor-pointer px-2 py-1 rounded hover:bg-red-500/10"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                    {mcpPreviewSlug && mcpPreviewData && (
+                      <div className="px-3 py-2.5 rounded-lg bg-cc-bg border border-cc-border text-xs font-mono-code overflow-x-auto">
+                        <div className="text-[11px] text-cc-muted mb-2 font-sans-ui">Server details:</div>
+                        {Object.entries((mcpPreviewData as Record<string, unknown>).mcpServers as Record<string, unknown> || {}).map(([name, def]) => {
+                          const server = def as Record<string, unknown>;
+                          return (
+                            <div key={name} className="flex items-center gap-2 py-1">
+                              <span className="text-cc-fg font-medium">{name}</span>
+                              <span className="text-cc-muted">({String(server.type || "unknown")})</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Directory Presets management */}
+            <section id="directory-presets" ref={setSectionRef("directory-presets")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Directory Presets</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted">
+                  Manage saved directory presets for additional directories at session creation.
+                </p>
+                {addDirsPresets.length === 0 ? (
+                  <p className="text-xs text-cc-muted italic">No directory presets saved yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {addDirsPresets.map((preset) => (
+                      <div key={preset.slug} className="rounded-lg bg-cc-hover">
+                        <div className="flex items-center gap-3 px-3 py-2.5">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-cc-fg font-medium truncate">{preset.name}</div>
+                            <div className="text-[11px] text-cc-muted">
+                              {preset.directories?.length || 0} director{(preset.directories?.length || 0) !== 1 ? "ies" : "y"}
+                              {preset.createdAt && (
+                                <> &middot; {new Date(preset.createdAt).toLocaleDateString()}</>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (editingDirsPreset === preset.slug) {
+                                setEditingDirsPreset(null);
+                              } else {
+                                try {
+                                  const res = await fetch(`/api/add-dirs/${preset.slug}`);
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setEditingDirsPreset(preset.slug);
+                                    setEditingDirsName(data.name);
+                                    setEditingDirsList(data.directories || []);
+                                  }
+                                } catch { /* ignore */ }
+                              }
+                            }}
+                            className="text-[11px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer px-2 py-1 rounded hover:bg-cc-active"
+                          >
+                            {editingDirsPreset === preset.slug ? "Cancel" : "Edit"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm(`Delete directory preset "${preset.name}"?`)) return;
+                              try {
+                                await fetch(`/api/add-dirs/${preset.slug}`, { method: "DELETE" });
+                                setAddDirsPresets((prev) => prev.filter((p) => p.slug !== preset.slug));
+                                if (editingDirsPreset === preset.slug) setEditingDirsPreset(null);
+                              } catch { /* ignore */ }
+                            }}
+                            className="text-[11px] text-red-400 hover:text-red-300 transition-colors cursor-pointer px-2 py-1 rounded hover:bg-red-500/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        {editingDirsPreset === preset.slug && (
+                          <div className="px-3 pb-3 space-y-2 border-t border-cc-border pt-2 mt-1">
+                            <label className="block">
+                              <span className="text-[11px] text-cc-muted">Name</span>
+                              <input
+                                type="text"
+                                value={editingDirsName}
+                                onChange={(e) => setEditingDirsName(e.target.value)}
+                                className="w-full mt-1 px-2.5 py-1.5 text-xs bg-cc-bg rounded-md border border-cc-border text-cc-fg"
+                              />
+                            </label>
+                            <div>
+                              <span className="text-[11px] text-cc-muted">Directories</span>
+                              {editingDirsList.map((dir, i) => (
+                                <div key={i} className="flex items-center gap-1.5 mt-1">
+                                  <input
+                                    type="text"
+                                    value={dir}
+                                    onChange={(e) => {
+                                      const updated = [...editingDirsList];
+                                      updated[i] = e.target.value;
+                                      setEditingDirsList(updated);
+                                    }}
+                                    className="flex-1 px-2.5 py-1.5 text-xs bg-cc-bg rounded-md border border-cc-border text-cc-fg font-mono-code"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingDirsList(editingDirsList.filter((_, j) => j !== i))}
+                                    className="text-red-400 hover:text-red-300 text-xs px-1.5 cursor-pointer"
+                                    title="Remove"
+                                  >
+                                    &times;
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => setEditingDirsList([...editingDirsList, ""])}
+                                className="mt-1.5 text-[11px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+                              >
+                                + Add directory
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const filteredDirs = editingDirsList.filter((d) => d.trim());
+                                if (!editingDirsName.trim() || filteredDirs.length === 0) return;
+                                try {
+                                  const res = await fetch(`/api/add-dirs/${preset.slug}`, {
+                                    method: "PUT",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ name: editingDirsName, directories: filteredDirs }),
+                                  });
+                                  if (res.ok) {
+                                    const updated = await res.json();
+                                    setAddDirsPresets((prev) =>
+                                      prev.map((p) => (p.slug === preset.slug ? updated : p)),
+                                    );
+                                    setEditingDirsPreset(null);
+                                  }
+                                } catch { /* ignore */ }
+                              }}
+                              className="px-3 py-1.5 text-xs rounded-lg bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
           </div>

@@ -175,6 +175,8 @@ export interface CodexAdapterOptions {
   recorder?: RecorderManager;
   /** Callback to kill the underlying process/connection on disconnect. */
   killProcess?: () => Promise<void> | void;
+  /** MCP config preset slug — servers written via config/value/write at init */
+  mcpConfigSlug?: string;
 }
 
 // ─── Stdio JSON-RPC Transport ────────────────────────────────────────────────
@@ -835,6 +837,29 @@ export class CodexAdapter {
       };
 
       this.emit({ type: "session_init", session: state });
+
+      // Write MCP server definitions if an MCP config preset was specified
+      if (this.options.mcpConfigSlug) {
+        try {
+          const { getMcpConfig } = await import("./mcp-config-manager.js");
+          const preset = getMcpConfig(this.options.mcpConfigSlug);
+          if (preset?.config?.mcpServers) {
+            const servers = preset.config.mcpServers as Record<string, unknown>;
+            for (const [name, serverDef] of Object.entries(servers)) {
+              await this.transport.call("config/value/write", {
+                keyPath: `mcp_servers.${name}`,
+                value: serverDef,
+                mergeStrategy: "upsert",
+              });
+            }
+            console.log(
+              `[codex-adapter] Wrote ${Object.keys(servers).length} MCP servers from preset "${this.options.mcpConfigSlug}"`,
+            );
+          }
+        } catch (err) {
+          console.warn(`[codex-adapter] Failed to write MCP config: ${err}`);
+        }
+      }
 
       // Fetch initial rate limits (non-blocking — don't fail init if this errors)
       this.transport.call("account/rateLimits/read", {}).then((result) => {

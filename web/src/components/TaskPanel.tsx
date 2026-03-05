@@ -10,6 +10,7 @@ import { formatResetTime, formatCodexResetTime, formatWindowDuration, formatToke
 import { timeAgo } from "../utils/time-ago.js";
 import { captureException } from "../analytics.js";
 import { SectionErrorBoundary } from "./SectionErrorBoundary.js";
+import { AgentProgressPanel } from "./AgentProgressPanel.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const COUNTDOWN_REFRESH_MS = 30_000;
@@ -134,6 +135,72 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
               />
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Claude Token Details ────────────────────────────────────────────────────
+
+function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
+  const details = useStore((s) => s.sessions.get(sessionId)?.claude_token_details);
+  const costUsd = useStore((s) => s.sessions.get(sessionId)?.total_cost_usd ?? 0);
+  const numTurns = useStore((s) => s.sessions.get(sessionId)?.num_turns ?? 0);
+  const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+
+  if (!details && costUsd === 0 && numTurns === 0) return null;
+
+  return (
+    <div className="shrink-0 px-4 py-3 space-y-2">
+      {/* Cost & turns summary */}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-cc-muted uppercase tracking-wider">Session</span>
+        <span className="text-[11px] text-cc-muted tabular-nums">
+          {numTurns} {numTurns === 1 ? "turn" : "turns"}
+          {costUsd > 0 && <span className="ml-1.5">${costUsd.toFixed(4)}</span>}
+        </span>
+      </div>
+
+      {/* Token breakdown */}
+      {details && (details.inputTokens > 0 || details.outputTokens > 0) && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted">Input</span>
+            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.inputTokens)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted">Output</span>
+            <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.outputTokens)}</span>
+          </div>
+          {details.cacheReadInputTokens > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-cc-muted">Cache Read</span>
+              <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cacheReadInputTokens)}</span>
+            </div>
+          )}
+          {details.cacheCreationInputTokens > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-cc-muted">Cache Write</span>
+              <span className="text-[11px] text-cc-fg tabular-nums font-medium">{formatTokenCount(details.cacheCreationInputTokens)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Context bar */}
+      {details && details.contextWindow > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted">Context</span>
+            <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
+              style={{ width: `${Math.min(contextPct, 100)}%` }}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -767,7 +834,12 @@ function UsageLimitsRenderer({ sessionId }: { sessionId: string }) {
       </>
     );
   }
-  return <UsageLimitsSection sessionId={sessionId} />;
+  return (
+    <>
+      <UsageLimitsSection sessionId={sessionId} />
+      <ClaudeTokenDetailsSection sessionId={sessionId} />
+    </>
+  );
 }
 
 /** Git branch info — extracted from inline JSX in TaskPanel */
@@ -997,7 +1069,7 @@ function TaskPanelConfigView({ isCodex }: { isCodex: boolean }) {
 
 // ─── Task Panel ──────────────────────────────────────────────────────────────
 
-export { CodexRateLimitsSection, CodexTokenDetailsSection };
+export { ClaudeTokenDetailsSection, CodexRateLimitsSection, CodexTokenDetailsSection };
 
 export function TaskPanel({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
@@ -1068,6 +1140,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
                   </SectionErrorBoundary>
                 );
               })}
+            <AgentProgressPanel sessionId={sessionId} />
           </div>
 
           {/* Settings button at bottom */}
