@@ -299,6 +299,28 @@ describe("Messages", () => {
     expect(messages[1].content).toBe("new2");
   });
 
+  it("clearMessages: empties messages and resets offset for a session", () => {
+    useStore.getState().addSession(makeSession("s1"));
+    useStore.getState().addSession(makeSession("s2"));
+    useStore.getState().appendMessage("s1", makeMessage({ content: "msg1" }));
+    useStore.getState().appendMessage("s1", makeMessage({ content: "msg2" }));
+    useStore.getState().appendMessage("s2", makeMessage({ content: "other" }));
+    useStore.getState().setMessageOffset("s1", 10);
+
+    useStore.getState().clearMessages("s1");
+
+    // s1 should be empty with no offset
+    expect(useStore.getState().messages.get("s1")).toEqual([]);
+    expect(useStore.getState().messageOffset.get("s1")).toBeUndefined();
+    // s2 should be untouched
+    expect(useStore.getState().messages.get("s2")).toHaveLength(1);
+  });
+
+  it("clearMessages: works on a session with no prior messages", () => {
+    useStore.getState().clearMessages("nonexistent");
+    expect(useStore.getState().messages.get("nonexistent")).toEqual([]);
+  });
+
   it("updateLastAssistantMessage: updates the last assistant message", () => {
     useStore.getState().addSession(makeSession("s1"));
     useStore.getState().appendMessage("s1", makeMessage({ role: "user", content: "q" }));

@@ -217,6 +217,40 @@ describe("Composer sending messages", () => {
 
     expect(textarea.value).toBe("");
   });
+
+  it("sending /clear calls clearMessages instead of appendMessage", () => {
+    const mockClearMessages = vi.fn();
+    mockStoreState.clearMessages = mockClearMessages;
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "/clear" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    // Should still send the /clear command to the CLI
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      type: "user_message",
+      content: "/clear",
+    }));
+    // Should clear local messages instead of appending
+    expect(mockClearMessages).toHaveBeenCalledWith("s1");
+    expect(mockAppendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sending a normal message does not call clearMessages", () => {
+    const mockClearMessages = vi.fn();
+    mockStoreState.clearMessages = mockClearMessages;
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockClearMessages).not.toHaveBeenCalled();
+    expect(mockAppendMessage).toHaveBeenCalled();
+  });
 });
 
 // ─── Plan mode toggle ────────────────────────────────────────────────────────

@@ -169,6 +169,7 @@ interface AppState {
   appendMessage: (sessionId: string, msg: ChatMessage) => void;
   prependMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
+  clearMessages: (sessionId: string) => void;
   setMessageOffset: (sessionId: string, offset: number) => void;
   updateLastAssistantMessage: (sessionId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
   setStreaming: (sessionId: string, text: string | null) => void;
@@ -585,6 +586,15 @@ export const useStore = create<AppState>((set) => ({
       const messages = new Map(s.messages);
       messages.set(sessionId, msgs);
       return { messages };
+    }),
+
+  clearMessages: (sessionId) =>
+    set((s) => {
+      const messages = new Map(s.messages);
+      messages.set(sessionId, []);
+      const messageOffset = new Map(s.messageOffset);
+      messageOffset.delete(sessionId);
+      return { messages, messageOffset };
     }),
 
   prependMessages: (sessionId, msgs) =>
