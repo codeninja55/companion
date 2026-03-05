@@ -44,6 +44,8 @@ interface AppState {
 
   // Messages per session
   messages: Map<string, ChatMessage[]>;
+  // Tracks how many older messages exist on the server before the initial history slice
+  messageOffset: Map<string, number>;
 
   // Streaming partial text per session
   streaming: Map<string, string>;
@@ -165,7 +167,9 @@ interface AppState {
 
   // Message actions
   appendMessage: (sessionId: string, msg: ChatMessage) => void;
+  prependMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
+  setMessageOffset: (sessionId: string, offset: number) => void;
   updateLastAssistantMessage: (sessionId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
   setStreaming: (sessionId: string, text: string | null) => void;
   setStreamingStats: (sessionId: string, stats: { startedAt?: number; outputTokens?: number } | null) => void;
@@ -348,6 +352,7 @@ export const useStore = create<AppState>((set) => ({
   sdkSessions: [],
   currentSessionId: getInitialSessionId(),
   messages: new Map(),
+  messageOffset: new Map(),
   streaming: new Map(),
   streamingStartedAt: new Map(),
   streamingOutputTokens: new Map(),
@@ -534,6 +539,7 @@ export const useStore = create<AppState>((set) => ({
       return {
         sessions: deleteFromMap(s.sessions, sessionId),
         messages: deleteFromMap(s.messages, sessionId),
+        messageOffset: deleteFromMap(s.messageOffset, sessionId),
         streaming: deleteFromMap(s.streaming, sessionId),
         streamingStartedAt: deleteFromMap(s.streamingStartedAt, sessionId),
         streamingOutputTokens: deleteFromMap(s.streamingOutputTokens, sessionId),
@@ -579,6 +585,27 @@ export const useStore = create<AppState>((set) => ({
       const messages = new Map(s.messages);
       messages.set(sessionId, msgs);
       return { messages };
+    }),
+
+  prependMessages: (sessionId, msgs) =>
+    set((s) => {
+      const existing = s.messages.get(sessionId) || [];
+      const existingIds = new Set(existing.map((m) => m.id));
+      const unique = msgs.filter((m) => !existingIds.has(m.id));
+      const messages = new Map(s.messages);
+      messages.set(sessionId, [...unique, ...existing]);
+      return { messages };
+    }),
+
+  setMessageOffset: (sessionId, offset) =>
+    set((s) => {
+      const messageOffset = new Map(s.messageOffset);
+      if (offset <= 0) {
+        messageOffset.delete(sessionId);
+      } else {
+        messageOffset.set(sessionId, offset);
+      }
+      return { messageOffset };
     }),
 
   updateLastAssistantMessage: (sessionId, updater) =>
@@ -951,6 +978,7 @@ export const useStore = create<AppState>((set) => ({
       sdkSessions: [],
       currentSessionId: null,
       messages: new Map(),
+      messageOffset: new Map(),
       streaming: new Map(),
       streamingStartedAt: new Map(),
       streamingOutputTokens: new Map(),

@@ -911,6 +911,18 @@ export function createRoutes(
     return c.json(enriched);
   });
 
+  api.get("/sessions/:id/messages", (c) => {
+    const id = c.req.param("id");
+    const before = parseInt(c.req.query("before") || "0", 10);
+    const limit = Math.min(parseInt(c.req.query("limit") || "100", 10), 500);
+    if (isNaN(before) || before < 0) {
+      return c.json({ error: "Invalid 'before' parameter" }, 400);
+    }
+    const result = wsBridge.getSessionMessages(id, before, limit);
+    if (!result) return c.json({ error: "Session not found" }, 404);
+    return c.json(result);
+  });
+
   api.get("/sessions/:id", (c) => {
     const id = c.req.param("id");
     const session = launcher.getSession(id);

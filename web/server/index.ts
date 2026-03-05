@@ -207,8 +207,10 @@ if (process.env.NODE_ENV === "production") {
   app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
 }
 
+const hostname = process.env.HOST || "0.0.0.0";
 const server = Bun.serve<SocketData>({
   port,
+  hostname,
   idleTimeout: idleTimeoutSeconds,
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -298,15 +300,15 @@ const server = Bun.serve<SocketData>({
 });
 
 const authToken = getToken();
-console.log(`Server running on http://localhost:${server.port}`);
+console.log(`Server running on http://${hostname}:${server.port}`);
 console.log();
 console.log(`  Auth token: ${authToken}`);
 if (process.env.COMPANION_AUTH_TOKEN) {
   console.log("  (using COMPANION_AUTH_TOKEN env var)");
 }
 console.log();
-console.log(`  CLI WebSocket:     ws://localhost:${server.port}/ws/cli/:sessionId`);
-console.log(`  Browser WebSocket: ws://localhost:${server.port}/ws/browser/:sessionId`);
+console.log(`  CLI WebSocket:     ws://${hostname}:${server.port}/ws/cli/:sessionId`);
+console.log(`  Browser WebSocket: ws://${hostname}:${server.port}/ws/browser/:sessionId`);
 
 if (process.env.NODE_ENV !== "production") {
   console.log("Dev mode: frontend at http://localhost:5174");

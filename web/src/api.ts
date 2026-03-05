@@ -795,6 +795,11 @@ export const api = {
       opts,
     ),
 
+  fetchOlderMessages: (sessionId: string, before: number, limit = 100) =>
+    get<{ messages: unknown[]; offset: number; hasMore: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/messages?before=${before}&limit=${limit}`,
+    ),
+
   listSessions: () => get<SdkSessionInfo[]>("/sessions"),
   discoverClaudeSessions: (limit = 200) =>
     get<{ sessions: ClaudeDiscoveredSession[] }>(

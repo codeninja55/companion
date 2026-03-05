@@ -36,6 +36,7 @@ vi.mock("../store.js", () => ({
   useStore: (selector: (state: Record<string, unknown>) => unknown) => {
     const state = {
       messages: mockStoreValues.messages ?? new Map(),
+      messageOffset: mockStoreValues.messageOffset ?? new Map(),
       streaming: mockStoreValues.streaming ?? new Map(),
       streamingStartedAt: mockStoreValues.streamingStartedAt ?? new Map(),
       streamingOutputTokens: mockStoreValues.streamingOutputTokens ?? new Map(),

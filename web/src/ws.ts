@@ -364,7 +364,7 @@ function ackSeq(sessionId: string, seq: number): void {
   sendToSession(sessionId, { type: "session_ack", last_seq: seq });
 }
 
-function extractTextFromBlocks(blocks: ContentBlock[]): string {
+export function extractTextFromBlocks(blocks: ContentBlock[]): string {
   return blocks
     .map((b) => {
       if (b.type === "text") return b.text;
@@ -745,10 +745,14 @@ function handleParsedMessage(
 
     case "auth_status": {
       if (data.error) {
+        const isInvalidKey = data.error.toLowerCase().includes("invalid api key");
+        const hint = isInvalidKey
+          ? "\nHint: If you're using Claude Code OAuth, ensure ANTHROPIC_API_KEY is not set in your shell environment."
+          : "";
         store.appendMessage(sessionId, {
           id: nextId(),
           role: "system",
-          content: `Auth error: ${data.error}`,
+          content: `Auth error: ${data.error}${hint}`,
           timestamp: Date.now(),
         });
       }
@@ -912,6 +916,10 @@ function handleParsedMessage(
         store.setStreamingStats(sessionId, null);
         store.clearToolProgress(sessionId);
         store.setSessionStatus(sessionId, "idle");
+      }
+      // Store pagination metadata so the UI can offer "load more" for older messages
+      if (typeof data.offset === "number") {
+        store.setMessageOffset(sessionId, data.offset);
       }
       break;
     }
