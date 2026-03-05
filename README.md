@@ -60,6 +60,9 @@ Open [http://localhost:3456](http://localhost:3456). The server runs in the back
 - **Permission control**: approve/deny sensitive operations from the UI.
 - **Session recovery**: restore work after process/server restarts.
 - **Dual-engine support**: designed for both Claude Code and Codex-backed flows.
+- **Docker support**: run containerized sessions via docker-compose.
+- **Remote execution**: run sessions on remote machines via SSH tunnel.
+- **Push notifications**: get browser alerts for permission requests.
 
 ## Screenshots
 | Chat + tool timeline | Permission flow |
