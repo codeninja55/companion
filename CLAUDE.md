@@ -13,8 +13,8 @@ It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Clau
 # Dev server (Hono backend on :3456 + Vite HMR on :5174)
 cd web && bun install && bun run dev
 
-# Or from repo root
-make dev
+# Or from repo root (requires mise — see .mise.toml)
+mise run dev
 
 # Type checking
 cd web && bun run typecheck
@@ -55,45 +55,108 @@ All UI components used in the message/chat flow **must** be represented in the P
 
 ## Architecture
 
-### Data Flow
+### Data flow
 
 ```
-Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJSON) ←→ Claude Code CLI
-     :5174              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
+Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket ←→ CLI
+     :5174        /ws/browser/:id      :3456       /ws/cli/:id    (--sdk-url)
+                  /ws/terminal/:id                                 PTY sessions
 ```
 
 1. Browser sends a "create session" REST call to the server
-2. Server spawns `claude --sdk-url ws://localhost:3456/ws/cli/SESSION_ID` as a subprocess
-3. CLI connects back to the server over WebSocket using NDJSON protocol
+2. Server spawns `claude --sdk-url ws://…/ws/cli/SESSION_ID` as a
+   subprocess (or `codex --full-auto` for Codex sessions)
+3. CLI connects back to the server over WebSocket — Claude Code uses
+   NDJSON, Codex uses JSON-RPC (`codex-adapter.ts` translates)
 4. Server bridges messages between CLI WebSocket and browser WebSocket
-5. Tool calls arrive as `control_request` (subtype `can_use_tool`) — browser renders approval UI, server relays `control_response` back
+5. Tool calls arrive as `control_request` (subtype `can_use_tool`) —
+   browser renders approval UI, server relays `control_response` back
+6. Terminal sessions use `/ws/terminal/:id` for PTY connections
+   (`terminal-manager.ts`)
 
 ### All code lives under `web/`
 
-- **`web/server/`** — Hono + Bun backend (runs on port 3456)
-  - `index.ts` — Server bootstrap, Bun.serve with dual WebSocket upgrade (CLI vs browser)
-  - `ws-bridge.ts` — Core message router. Maintains per-session state (CLI socket, browser sockets, message history, pending permissions). Parses NDJSON from CLI, translates to typed JSON for browsers.
-  - `cli-launcher.ts` — Spawns/kills/relaunches Claude Code CLI processes. Handles `--resume` for session recovery. Persists session state across server restarts.
-  - `session-store.ts` — JSON file persistence to `$TMPDIR/vibe-sessions/`. Debounced writes.
-  - `session-types.ts` — All TypeScript types for CLI messages (NDJSON), browser messages, session state, permissions.
-  - `routes.ts` — REST API: session CRUD, filesystem browsing, environment management.
-  - `env-manager.ts` — CRUD for environment profiles stored in `~/.companion/envs/`.
+- **`web/server/`** — Hono + Bun backend (runs on port 3456). Key
+  subsystems:
+  - **Core:** `index.ts` (bootstrap, Bun.serve, WebSocket upgrade
+    routing), `constants.ts`, `service.ts` (launchd/systemd),
+    `cache-headers.ts`
+  - **WebSocket bridge:** `ws-bridge.ts` (core router, per-session
+    state) + split modules: `-browser`, `-codex`, `-controls`,
+    `-replay`, `-types`
+  - **CLI management:** `cli-launcher.ts` (spawn/kill/resume),
+    `codex-adapter.ts` (JSON-RPC translation), `codex-home.ts`,
+    `path-resolver.ts`
+  - **Session persistence:** `session-store.ts` (JSON file in
+    `$TMPDIR/vibe-sessions/`), `session-types.ts`,
+    `session-names.ts`, `session-git-info.ts`,
+    `session-linear-issues.ts`
+  - **Auth/containers:** `auth-manager.ts`, `container-manager.ts`,
+    `image-pull-manager.ts`, `claude-container-auth.ts`,
+    `codex-container-auth.ts`
+  - **Agents/scheduling:** `agent-executor.ts`, `agent-store.ts`,
+    `agent-types.ts`, `cron-scheduler.ts`, `cron-store.ts`,
+    `cron-types.ts`
+  - **Integrations:** `relay-client.ts` (cloud relay),
+    `chat-bot.ts` (chat SDK), `pr-poller.ts` (GitHub PR polling),
+    `linear-project-manager.ts`, `linear-cache.ts`
+  - **Manager pattern** (`~/.companion/<feature>/` CRUD):
+    `env-manager.ts`, `provider-manager.ts`, `push-manager.ts`,
+    `remote-profile-manager.ts`, `prompt-manager.ts`,
+    `settings-manager.ts`, `ssh-manager.ts`, `terminal-manager.ts`
+  - **Utilities:** `think-tag-parser.ts`, `recorder.ts`, `replay.ts`,
+    `auto-namer.ts`, `ai-validator.ts`, `update-checker.ts`,
+    `git-utils.ts`, `worktree-tracker.ts`, `usage-limits.ts`
+  - **Routes** (`web/server/routes/`): 14 modules following the
+    `registerXRoutes(api)` pattern — agent, chat, cron, env, fs,
+    git, linear, prompt, provider, push, remote, settings, skills,
+    system. `routes.ts` imports all 14 + inline session CRUD.
 
 - **`web/src/`** — React 19 frontend
-  - `store.ts` — Zustand store. All state keyed by session ID (messages, streaming text, permissions, tasks, connection status).
-  - `ws.ts` — Browser WebSocket client. Connects per-session, handles all incoming message types, auto-reconnects. Extracts task items from `TaskCreate`/`TaskUpdate`/`TodoWrite` tool calls.
-  - `types.ts` — Re-exports server types + client-only types (`ChatMessage`, `TaskItem`, `SdkSessionInfo`).
+  - `store.ts` — Zustand store, all state keyed by session ID.
+  - `ws.ts` — Browser WebSocket client per session, auto-reconnects.
+  - `terminal-ws.ts` — Terminal WebSocket client.
+  - `sw.ts` / `sw-register.ts` — Service worker for push
+    notifications.
   - `api.ts` — REST client for session management.
-  - `App.tsx` — Root layout with sidebar, chat view, task panel. Hash routing (`#/playground`).
-  - `components/` — UI: `ChatView`, `MessageFeed`, `MessageBubble`, `ToolBlock`, `Composer`, `Sidebar`, `TopBar`, `HomePage`, `TaskPanel`, `PermissionBanner`, `EnvManager`, `Playground`.
+  - `types.ts` — Re-exports server types + client-only types.
+  - `App.tsx` — Root layout with hash routing (`#/playground`).
+  - `components/` — 50+ UI components grouped by area:
+    - **Session flow:** `ChatView`, `MessageFeed`, `MessageBubble`,
+      `ToolBlock`, `Composer`, `PermissionBanner`,
+      `SessionCreationProgress`, `SessionLaunchOverlay`,
+      `SessionEditorPane`
+    - **Navigation:** `Sidebar`, `TopBar`, `HomePage`, `LoginPage`,
+      `SettingsPage`
+    - **Panels:** `TaskPanel`, `FilesPanel`, `DiffPanel`,
+      `DiffViewer`, `McpPanel`, `ProcessPanel`
+    - **Terminal:** `TerminalView`, `TerminalPage`,
+      `SessionTerminalDock`
+    - **Integrations:** `LinearSettingsPage`, `IntegrationsPage`
+    - **Config:** `EnvManager`, `ProviderManager`, `RemoteManager`,
+      `RemoteConnect`, `ModelSwitcher`, `ClaudeMdEditor`,
+      `PromptsPage`, `FolderPicker`
+    - **Agents:** `AgentsPage`, `RunsPage`, `CronManager`
+    - **Utilities:** `AppErrorBoundary`, `Playground`,
+      `DockerBuilderPage`, `UpdateBanner`, `UpdateOverlay`
 
-- **`web/bin/cli.ts`** — CLI entry point (`bunx the-companion`). Sets `__COMPANION_PACKAGE_ROOT` and imports the server.
+- **`web/bin/cli.ts`** — CLI entry point (`bunx the-companion`). Sets
+  `__COMPANION_PACKAGE_ROOT` and imports the server.
 
-### WebSocket Protocol
+### WebSocket protocol
 
-The CLI uses NDJSON (newline-delimited JSON). Key message types from CLI: `system` (init/status), `assistant`, `result`, `stream_event`, `control_request`, `tool_progress`, `tool_use_summary`, `keep_alive`. Messages to CLI: `user`, `control_response`, `control_request` (for interrupt/set_model/set_permission_mode).
+The CLI uses NDJSON (newline-delimited JSON). Key message types from CLI:
+`system` (init/status), `assistant`, `result`, `stream_event`,
+`control_request`, `tool_progress`, `tool_use_summary`, `keep_alive`.
+Messages to CLI: `user`, `control_response`, `control_request` (for
+interrupt/set_model/set_permission_mode).
 
-Full protocol documentation is in `WEBSOCKET_PROTOCOL_REVERSED.md`.
+Terminal sessions use `/ws/terminal/:id` for PTY connections
+(`terminal-manager.ts`). Codex sessions use JSON-RPC instead of NDJSON;
+`codex-adapter.ts` translates between the two wire formats.
+
+Full protocol documentation: `WEBSOCKET_PROTOCOL_REVERSED.md` (Claude
+Code NDJSON) and `CODEX_MAPPING.md` (Codex JSON-RPC translation).
 
 ### Session Lifecycle
 
