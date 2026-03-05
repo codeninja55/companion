@@ -135,6 +135,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const msg = text.trim();
     if (!msg || !isConnected) return;
 
+    // Send the message to the CLI
     sendToSession(sessionId, {
       type: "user_message",
       content: msg,
@@ -142,13 +143,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
       images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
     });
 
-    useStore.getState().appendMessage(sessionId, {
-      id: `user-${Date.now()}-${++idCounter}`,
-      role: "user",
-      content: msg,
-      images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
-      timestamp: Date.now(),
-    });
+    // If the user sent /clear, clear the local message history to match the CLI
+    if (msg === "/clear") {
+      useStore.getState().clearMessages(sessionId);
+    } else {
+      useStore.getState().appendMessage(sessionId, {
+        id: `user-${Date.now()}-${++idCounter}`,
+        role: "user",
+        content: msg,
+        images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+        timestamp: Date.now(),
+      });
+    }
 
     setText("");
     setImages([]);
