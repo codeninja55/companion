@@ -1,5 +1,33 @@
 # Changelog
 
+## [Unreleased] — codeninja55/companion fork
+
+Changes added on top of the upstream 0.72.0 release.
+
+### Features
+
+* **think-tags:** parse `<think>` XML tags from assistant stream into
+  `ThinkingBlock` content ([#1](https://github.com/codeninja55/companion/pull/1))
+* **push:** add web push notification support with VAPID and service worker
+  ([#2](https://github.com/codeninja55/companion/pull/2))
+* **providers:** add local model provider management (Ollama, LM Studio, etc.)
+  with environment resolution
+  ([#3](https://github.com/codeninja55/companion/pull/3))
+* **remote-ssh:** add remote SSH execution via authenticated reverse tunnel
+  ([#4](https://github.com/codeninja55/companion/pull/4))
+* **docker:** add multi-stage Dockerfile and docker-compose orchestration
+  ([#5](https://github.com/codeninja55/companion/pull/5))
+* **server:** bind to 0.0.0.0 and surface OAuth hint on invalid API key
+* **web:** add paginated message history loading with scroll-to-load
+  ([#6](https://github.com/codeninja55/companion/pull/6))
+
+### Chores
+
+* **tooling:** replace Makefile with mise tasks; pin node@25.8.0 and bun@1.3.10
+  ([#7](https://github.com/codeninja55/companion/pull/7))
+
+---
+
 ## [0.72.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.71.0...the-companion-v0.72.0) (2026-03-04)
 
 

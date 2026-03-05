@@ -96,11 +96,16 @@ COMPANION_AUTH_TOKEN="my-secret-token" bunx the-companion
 ```
 
 ## Development
+
+Toolchain versions are pinned via [mise](https://mise.jdx.dev). Install it, then run:
+
 ```bash
-make dev
+mise install       # install pinned node + bun versions
+mise run install   # install npm dependencies
+mise run dev       # start dev server
 ```
 
-Manual:
+Manual (without mise):
 ```bash
 cd web
 bun install
@@ -109,9 +114,8 @@ bun run dev
 
 Checks:
 ```bash
-cd web
-bun run typecheck
-bun run test
+mise run typecheck
+mise run test
 ```
 
 ## Preview / Prerelease
