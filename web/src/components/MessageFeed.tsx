@@ -8,8 +8,9 @@ import {
   getPreview,
   ToolIcon,
 } from "./ToolBlock.js";
-import type { ChatMessage, ContentBlock, SdkSessionInfo } from "../types.js";
+import type { ChatMessage, ContentBlock, SdkSessionInfo, BrowserIncomingMessage } from "../types.js";
 import { formatElapsed, formatTokenCount } from "../utils/format.js";
+import { extractTextFromBlocks } from "../ws.js";
 
 const FEED_PAGE_SIZE = 100;
 const RESUME_HISTORY_PAGE_SIZE = 40;
@@ -592,6 +593,50 @@ function AssistantAvatar() {
   );
 }
 
+// ─── Pagination helpers ───────────────────────────────────────────────────────
+
+/**
+ * Convert raw BrowserIncomingMessage records from the REST history endpoint
+ * into ChatMessage objects suitable for the feed.
+ *
+ * Handles assistant messages (with optional contentBlocks), user messages,
+ * and tool_use_summary messages (appended as system messages).
+ */
+function parseRawMessages(
+  raw: BrowserIncomingMessage[],
+): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const msg of raw) {
+    if (msg.type === "assistant") {
+      const inner = msg.message;
+      out.push({
+        id: inner.id ?? `hist-${Math.random().toString(36).slice(2)}`,
+        role: "assistant",
+        content: extractTextFromBlocks(inner.content ?? []),
+        contentBlocks: inner.content,
+        timestamp: msg.timestamp ?? Date.now(),
+        model: inner.model,
+        stopReason: inner.stop_reason ?? undefined,
+      });
+    } else if (msg.type === "user_message") {
+      out.push({
+        id: `user-${msg.timestamp ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+        role: "user",
+        content: msg.content,
+        timestamp: msg.timestamp ?? Date.now(),
+      });
+    } else if (msg.type === "tool_use_summary") {
+      out.push({
+        id: `summary-${Math.random().toString(36).slice(2)}`,
+        role: "system",
+        content: msg.summary,
+        timestamp: Date.now(),
+      });
+    }
+  }
+  return out;
+}
+
 // ─── Main Feed ───────────────────────────────────────────────────────────────
 
 export function MessageFeed({ sessionId }: { sessionId: string }) {
@@ -609,6 +654,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   );
   const sessionStatus = useStore((s) => s.sessionStatus.get(sessionId));
   const toolProgress = useStore((s) => s.toolProgress.get(sessionId));
+  const messageOffset = useStore((s) => s.messageOffset.get(sessionId) ?? 0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
@@ -623,6 +669,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const [resumeHistoryLoading, setResumeHistoryLoading] = useState(false);
   const [resumeHistoryError, setResumeHistoryError] = useState("");
   const resumeHistoryMessageIdsRef = useRef<Set<string>>(new Set());
+  const [fetchingOlder, setFetchingOlder] = useState(false);
   const chatTabReentryTick = useStore(
     (s) => s.chatTabReentryTickBySession.get(sessionId) ?? 0,
   );
@@ -670,27 +717,55 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     setResumeHistoryLoading(false);
     setResumeHistoryError("");
     resumeHistoryMessageIdsRef.current = new Set();
+    setFetchingOlder(false);
   }, [sessionId, resumeSourceSessionId]);
 
   const totalEntries = grouped.length;
-  const hasMore = totalEntries > visibleCount;
-  const visibleEntries = hasMore
+  const hasMoreLocal = totalEntries > visibleCount;
+  const hasMoreServer = messageOffset > 0;
+  const hasMore = hasMoreLocal || hasMoreServer;
+  const visibleEntries = hasMoreLocal
     ? grouped.slice(totalEntries - visibleCount)
     : grouped;
-  const hiddenCount = totalEntries - visibleEntries.length;
+  const hiddenLocalCount = totalEntries - visibleEntries.length;
+  const hiddenCount = hiddenLocalCount + messageOffset;
 
-  const handleLoadMore = useCallback(() => {
+  const handleLoadMore = useCallback(async () => {
     const el = containerRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
-    setVisibleCount((c) => c + FEED_PAGE_SIZE);
-    // Preserve scroll position after DOM updates
-    requestAnimationFrame(() => {
-      if (el) {
-        const newHeight = el.scrollHeight;
-        el.scrollTop += newHeight - prevHeight;
-      }
-    });
-  }, []);
+
+    // If there are still locally-hidden messages, reveal them first
+    if (hasMoreLocal) {
+      setVisibleCount((c) => c + FEED_PAGE_SIZE);
+      requestAnimationFrame(() => {
+        if (el) {
+          const newHeight = el.scrollHeight;
+          el.scrollTop += newHeight - prevHeight;
+        }
+      });
+      return;
+    }
+
+    // All local messages are visible — fetch older messages from the server
+    if (messageOffset <= 0 || fetchingOlder) return;
+    setFetchingOlder(true);
+    try {
+      const result = await api.fetchOlderMessages(sessionId, messageOffset);
+      const parsed = parseRawMessages(result.messages as BrowserIncomingMessage[]);
+      useStore.getState().prependMessages(sessionId, parsed);
+      useStore.getState().setMessageOffset(sessionId, result.offset);
+      requestAnimationFrame(() => {
+        if (el) {
+          const newHeight = el.scrollHeight;
+          el.scrollTop += newHeight - prevHeight;
+        }
+      });
+    } catch (err) {
+      console.error("[MessageFeed] Failed to load older messages:", err);
+    } finally {
+      setFetchingOlder(false);
+    }
+  }, [hasMoreLocal, messageOffset, fetchingOlder, sessionId]);
 
   const loadResumeHistoryPage = useCallback(
     async (options: { preserveScroll?: boolean } = {}) => {
@@ -973,18 +1048,31 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
           {hasMore && (
             <div className="flex justify-center pb-2">
               <button
-                onClick={handleLoadMore}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors cursor-pointer"
+                onClick={() => void handleLoadMore()}
+                disabled={fetchingOlder}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  className="w-3 h-3"
-                >
-                  <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
-                </svg>
-                Load {Math.min(FEED_PAGE_SIZE, hiddenCount)} more ({hiddenCount}{" "}
-                hidden)
+                {fetchingOlder ? (
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="w-3 h-3 animate-spin"
+                  >
+                    <circle cx="8" cy="8" r="6" opacity="0.25" />
+                    <path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="w-3 h-3"
+                  >
+                    <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
+                  </svg>
+                )}
+                {fetchingOlder ? "Loading..." : `Load more (${hiddenCount} older)`}
               </button>
             </div>
           )}

@@ -364,7 +364,7 @@ function ackSeq(sessionId: string, seq: number): void {
   sendToSession(sessionId, { type: "session_ack", last_seq: seq });
 }
 
-function extractTextFromBlocks(blocks: ContentBlock[]): string {
+export function extractTextFromBlocks(blocks: ContentBlock[]): string {
   return blocks
     .map((b) => {
       if (b.type === "text") return b.text;
@@ -916,6 +916,10 @@ function handleParsedMessage(
         store.setStreamingStats(sessionId, null);
         store.clearToolProgress(sessionId);
         store.setSessionStatus(sessionId, "idle");
+      }
+      // Store pagination metadata so the UI can offer "load more" for older messages
+      if (typeof data.offset === "number") {
+        store.setMessageOffset(sessionId, data.offset);
       }
       break;
     }

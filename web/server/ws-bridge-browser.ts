@@ -45,6 +45,8 @@ export function handleSessionSubscribe(
     sendToBrowser(ws, {
       type: "message_history",
       messages: session.messageHistory,
+      total: session.messageHistory.length,
+      offset: 0,
     });
     const transientMissed = session.eventBuffer
       .filter((evt) => evt.seq > lastAckSeq && !isHistoryBackedEvent(evt.message));

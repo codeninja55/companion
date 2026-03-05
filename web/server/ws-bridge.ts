@@ -483,11 +483,19 @@ export class WsBridge {
     };
     this.sendToBrowser(ws, snapshot);
 
-    // Replay message history so the browser can reconstruct the conversation
+    // Replay message history so the browser can reconstruct the conversation.
+    // Cap the initial payload to the last 100 messages to avoid slow reconnects.
     if (session.messageHistory.length > 0) {
+      const INITIAL_HISTORY_SIZE = 100;
+      const total = session.messageHistory.length;
+      const slice = total > INITIAL_HISTORY_SIZE
+        ? session.messageHistory.slice(total - INITIAL_HISTORY_SIZE)
+        : session.messageHistory;
       this.sendToBrowser(ws, {
         type: "message_history",
-        messages: session.messageHistory,
+        messages: slice,
+        total,
+        offset: total - slice.length,
       });
     }
 
@@ -1206,6 +1214,20 @@ export class WsBridge {
     } catch (err) {
       console.error(`[ws-bridge] Failed to send to CLI for session ${session.id}:`, err);
     }
+  }
+
+  /** Return a page of message history for a session (for REST pagination). */
+  getSessionMessages(sessionId: string, before: number, limit: number):
+      { messages: BrowserIncomingMessage[]; offset: number; hasMore: boolean } | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    const end = Math.max(0, Math.min(before, session.messageHistory.length));
+    const start = Math.max(0, end - limit);
+    return {
+      messages: session.messageHistory.slice(start, end),
+      offset: start,
+      hasMore: start > 0,
+    };
   }
 
   /** Push a session name update to all connected browsers for a session. */
