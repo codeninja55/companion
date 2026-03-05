@@ -68,6 +68,7 @@ vi.mock("./session-names.js", () => ({
 
 vi.mock("./settings-manager.js", () => ({
   DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4.6",
+  VALID_PERMISSION_MODES: ["plan", "default", "acceptEdits", "bypassPermissions"],
   getSettings: vi.fn(() => ({
     anthropicApiKey: "",
     anthropicModel: "claude-sonnet-4.6",
@@ -82,6 +83,7 @@ vi.mock("./settings-manager.js", () => ({
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
+    defaultPermissionMode: "plan",
     updateChannel: "stable",
     updatedAt: 0,
   })),
@@ -1574,6 +1576,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1610,6 +1613,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1639,6 +1643,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1716,6 +1721,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2082,6 +2088,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -2102,6 +2109,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
     });
   });
@@ -2121,6 +2129,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -2141,6 +2150,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
     });
   });
@@ -2162,6 +2172,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 456,
     });
@@ -2187,6 +2198,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: undefined,
       aiValidationAutoApprove: undefined,
       aiValidationAutoDeny: undefined,
+      defaultPermissionMode: undefined,
       updateChannel: undefined,
     });
     const json = await res.json();
@@ -2202,6 +2214,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
     });
   });
@@ -2221,6 +2234,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 789,
     });
@@ -2258,6 +2272,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 999,
     });
@@ -2463,6 +2478,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2488,6 +2504,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2567,6 +2584,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2653,6 +2671,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2704,6 +2723,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2729,6 +2749,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2777,6 +2798,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2807,6 +2829,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2836,6 +2859,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2866,6 +2890,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2931,6 +2956,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2975,6 +3001,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3000,6 +3027,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3056,6 +3084,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3081,6 +3110,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3152,6 +3182,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });

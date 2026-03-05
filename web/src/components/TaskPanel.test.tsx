@@ -88,6 +88,7 @@ interface MockStoreState {
   updateSession: ReturnType<typeof vi.fn>;
   newSession: ReturnType<typeof vi.fn>;
   setLinkedLinearIssue: ReturnType<typeof vi.fn>;
+  toolProgress: Map<string, Map<string, { toolName: string; elapsedSeconds: number }>>;
 }
 
 let mockState: MockStoreState;
@@ -112,6 +113,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     updateSession: vi.fn(),
     newSession: vi.fn(),
     setLinkedLinearIssue: vi.fn(),
+    toolProgress: new Map(),
     ...overrides,
   };
 }

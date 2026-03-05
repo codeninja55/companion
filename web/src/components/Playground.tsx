@@ -13,6 +13,7 @@ import { useStore } from "../store.js";
 import { navigateToSession, navigateHome } from "../utils/routing.js";
 import { UpdateBanner } from "./UpdateBanner.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
+import { AgentProgressPanel } from "./AgentProgressPanel.js";
 import { ChatView } from "./ChatView.js";
 import { api } from "../api.js";
 import type {
@@ -2539,6 +2540,17 @@ export function Playground() {
             </Card>
           </div>
         </Section>
+        {/* ─── Agent Progress Panel ──────────────────────────── */}
+        <Section
+          title="Agent Progress Panel"
+          description="Inline sub-agent status shown in TaskPanel — filters for Agent/Task tools from toolProgress"
+        >
+          <div className="space-y-4 max-w-3xl">
+            <Card label="With active sub-agents (Agent + Task, Bash filtered out)">
+              <PlaygroundAgentProgress />
+            </Card>
+          </div>
+        </Section>
         {/* ─── Session Items ──────────────────────────────────── */}
         <Section
           title="Session Items"
@@ -2549,6 +2561,36 @@ export function Playground() {
       </div>
     </div>
   );
+}
+
+// ─── Agent Progress Playground ───────────────────────────────────────────────
+
+function PlaygroundAgentProgress() {
+  // Set up store state synchronously before first render to avoid
+  // infinite-loop from useSyncExternalStore snapshot instability.
+  useState(() => {
+    const s = useStore.getState();
+    s.setToolProgress(PLAYGROUND_AGENT_SESSION, "tool-1", {
+      toolName: "Agent",
+      elapsedSeconds: 125,
+    });
+    s.setToolProgress(PLAYGROUND_AGENT_SESSION, "tool-2", {
+      toolName: "Task",
+      elapsedSeconds: 42,
+    });
+    s.setToolProgress(PLAYGROUND_AGENT_SESSION, "tool-3", {
+      toolName: "Bash",
+      elapsedSeconds: 10,
+    });
+  });
+
+  useEffect(() => {
+    return () => {
+      useStore.getState().clearToolProgress(PLAYGROUND_AGENT_SESSION);
+    };
+  }, []);
+
+  return <AgentProgressPanel sessionId={PLAYGROUND_AGENT_SESSION} />;
 }
 
 // ─── Session Item Playground ─────────────────────────────────────────────────
@@ -3447,6 +3489,7 @@ function TaskRow({ task }: { task: TaskItem }) {
 
 // ─── Inline AiValidationToggle playground wrapper ───────────────────────────
 
+const PLAYGROUND_AGENT_SESSION = "playground-agents";
 const PLAYGROUND_AI_VALIDATION_SESSION = "ai-validation-playground";
 
 function PlaygroundAiValidationToggle({ enabled }: { enabled: boolean }) {

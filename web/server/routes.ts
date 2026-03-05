@@ -37,7 +37,11 @@ import { getPushManager } from "./push-manager.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
+import { registerMcpConfigRoutes } from "./routes/mcp-config-routes.js";
+import { registerAddDirsRoutes } from "./routes/add-dirs-routes.js";
 import { getSettings } from "./settings-manager.js";
+import * as mcpConfigManager from "./mcp-config-manager.js";
+import * as addDirsManager from "./add-dirs-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
 import { verifyToken, getToken, getLanAddress, regenerateToken, getAllAddresses } from "./auth-manager.js";
@@ -433,9 +437,22 @@ export function createRoutes(
         }
       }
 
+      const effectivePermissionMode = body.permissionMode || getSettings().defaultPermissionMode;
+
+      // Resolve additional directories from preset slug
+      let addDirs: string[] | undefined;
+      if (body.addDirsSlug) {
+        const preset = addDirsManager.getAddDirs(body.addDirsSlug);
+        if (preset) {
+          addDirs = preset.directories;
+        } else {
+          console.warn(`[routes] Add-dirs preset "${body.addDirsSlug}" not found, ignoring`);
+        }
+      }
+
       const session = launcher.launch({
         model: body.model,
-        permissionMode: body.permissionMode,
+        permissionMode: effectivePermissionMode,
         cwd,
         claudeBinary: body.claudeBinary,
         codexBinary: body.codexBinary,
@@ -454,7 +471,18 @@ export function createRoutes(
         forkSession,
         remoteConnectionId: body.remoteConnectionId,
         remoteCwd: body.remoteCwd,
+        mcpConfigSlug: body.mcpConfigSlug,
+        allowDangerousPermissions: body.allowDangerousPermissions === true,
+        addDirs,
       });
+
+      // Persist MCP/addDirs/dangerous flags in session info
+      const sessionInfo = launcher.getSession(session.sessionId);
+      if (sessionInfo) {
+        if (body.mcpConfigSlug) sessionInfo.mcpConfigSlug = body.mcpConfigSlug;
+        if (body.allowDangerousPermissions) sessionInfo.allowDangerousPermissions = true;
+        if (body.addDirsSlug) sessionInfo.addDirsSlug = body.addDirsSlug;
+      }
 
       // Re-track container with real session ID and mark session as containerized
       // so the bridge preserves the host cwd for sidebar grouping
@@ -822,9 +850,22 @@ export function createRoutes(
         // --- Step: Launch CLI ---
         await emitProgress(stream, "launching_cli", "Launching Claude Code...", "in_progress");
 
+        const effectivePermissionMode = body.permissionMode || getSettings().defaultPermissionMode;
+
+        // Resolve additional directories from preset slug
+        let addDirs: string[] | undefined;
+        if (body.addDirsSlug) {
+          const preset = addDirsManager.getAddDirs(body.addDirsSlug);
+          if (preset) {
+            addDirs = preset.directories;
+          } else {
+            console.warn(`[routes] Add-dirs preset "${body.addDirsSlug}" not found, ignoring`);
+          }
+        }
+
         const session = launcher.launch({
           model: body.model,
-          permissionMode: body.permissionMode,
+          permissionMode: effectivePermissionMode,
           cwd,
           claudeBinary: body.claudeBinary,
           codexBinary: body.codexBinary,
@@ -843,7 +884,18 @@ export function createRoutes(
           forkSession,
           remoteConnectionId: body.remoteConnectionId,
           remoteCwd: body.remoteCwd,
+          mcpConfigSlug: body.mcpConfigSlug,
+          allowDangerousPermissions: body.allowDangerousPermissions === true,
+          addDirs,
         });
+
+        // Persist MCP/addDirs/dangerous flags in session info
+        const sessionInfo = launcher.getSession(session.sessionId);
+        if (sessionInfo) {
+          if (body.mcpConfigSlug) sessionInfo.mcpConfigSlug = body.mcpConfigSlug;
+          if (body.allowDangerousPermissions) sessionInfo.allowDangerousPermissions = true;
+          if (body.addDirsSlug) sessionInfo.addDirsSlug = body.addDirsSlug;
+        }
 
         // Re-track container and mark session as containerized
         if (containerInfo) {
@@ -1696,6 +1748,8 @@ export function createRoutes(
   registerCronRoutes(api, cronScheduler);
   registerAgentRoutes(api, agentExecutor);
   registerRemoteRoutes(api);
+  registerMcpConfigRoutes(api);
+  registerAddDirsRoutes(api);
 
   // ─── Worktree cleanup helper ────────────────────────────────────
 

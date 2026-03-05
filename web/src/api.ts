@@ -229,6 +229,12 @@ export interface CreateSessionOpts {
   forkSession?: boolean;
   remoteConnectionId?: string;
   remoteCwd?: string;
+  /** MCP config preset slug */
+  mcpConfigSlug?: string;
+  /** Enable dangerous permission bypass */
+  allowDangerousPermissions?: boolean;
+  /** Additional directories preset slug */
+  addDirsSlug?: string;
 }
 
 export interface BackendInfo {
@@ -400,6 +406,7 @@ export interface AppSettings {
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
   updateChannel: "stable" | "prerelease";
+  defaultPermissionMode?: string;
 }
 
 export interface ArchiveInfo {

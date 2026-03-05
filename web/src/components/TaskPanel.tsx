@@ -10,6 +10,7 @@ import { formatResetTime, formatCodexResetTime, formatWindowDuration, formatToke
 import { timeAgo } from "../utils/time-ago.js";
 import { captureException } from "../analytics.js";
 import { SectionErrorBoundary } from "./SectionErrorBoundary.js";
+import { AgentProgressPanel } from "./AgentProgressPanel.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const COUNTDOWN_REFRESH_MS = 30_000;
@@ -1068,6 +1069,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
                   </SectionErrorBoundary>
                 );
               })}
+            <AgentProgressPanel sessionId={sessionId} />
           </div>
 
           {/* Settings button at bottom */}

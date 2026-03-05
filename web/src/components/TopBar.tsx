@@ -166,6 +166,14 @@ export function TopBar() {
                           : "bg-cc-success"
                   }`} />
                   Session
+                  {sdkSession?.allowDangerousPermissions && (
+                    <span
+                      className="text-[9px] rounded-full min-w-[15px] h-[15px] px-1.5 flex items-center justify-center font-semibold leading-none bg-red-500/15 text-red-400"
+                      title="Dangerous permissions enabled"
+                    >
+                      UNSAFE
+                    </span>
+                  )}
               </button>
               <button
                 onClick={() => activateWorkspaceTab("diff")}

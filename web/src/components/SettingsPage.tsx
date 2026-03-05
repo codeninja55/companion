@@ -62,6 +62,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [aiValidationEnabled, setAiValidationEnabled] = useState(false);
   const [aiValidationAutoApprove, setAiValidationAutoApprove] = useState(true);
   const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(true);
+  const [defaultPermissionMode, setDefaultPermissionMode] = useState("plan");
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -134,6 +135,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         if (typeof s.aiValidationAutoApprove === "boolean") setAiValidationAutoApprove(s.aiValidationAutoApprove);
         if (typeof s.aiValidationAutoDeny === "boolean") setAiValidationAutoDeny(s.aiValidationAutoDeny);
         if (s.updateChannel === "stable" || s.updateChannel === "prerelease") setUpdateChannel(s.updateChannel);
+        if (s.defaultPermissionMode) setDefaultPermissionMode(s.defaultPermissionMode);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -350,6 +352,29 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </button>
                 <p className="text-xs text-cc-muted px-1">
                   Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
+                </p>
+
+                <div className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg">
+                  <span>Default permission mode</span>
+                  <select
+                    value={defaultPermissionMode}
+                    onChange={async (e) => {
+                      const value = e.target.value;
+                      setDefaultPermissionMode(value);
+                      try {
+                        await api.updateSettings({ defaultPermissionMode: value } as Record<string, unknown>);
+                      } catch { /* ignore */ }
+                    }}
+                    className="text-xs bg-transparent text-cc-fg border-none outline-none cursor-pointer"
+                  >
+                    <option value="plan">Plan</option>
+                    <option value="default">Default</option>
+                    <option value="acceptEdits">Accept edits</option>
+                    <option value="bypassPermissions">Bypass permissions</option>
+                  </select>
+                </div>
+                <p className="text-xs text-cc-muted px-1">
+                  The permission mode pre-selected when creating sessions. Can be overridden per session.
                 </p>
               </div>
             </section>

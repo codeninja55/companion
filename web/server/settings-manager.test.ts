@@ -38,6 +38,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -84,6 +85,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -137,6 +139,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -188,5 +191,52 @@ describe("settings-manager", () => {
     updateSettings({ updateChannel: "prerelease" });
     const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
     expect(updated.updateChannel).toBe("prerelease");
+  });
+
+  // defaultPermissionMode tests
+  it("defaults defaultPermissionMode to plan when file is missing", () => {
+    expect(getSettings().defaultPermissionMode).toBe("plan");
+  });
+
+  it("updates defaultPermissionMode and persists", () => {
+    const updated = updateSettings({ defaultPermissionMode: "bypassPermissions" });
+    expect(updated.defaultPermissionMode).toBe("bypassPermissions");
+
+    // Verify round-trip: reload from disk
+    _resetForTest(settingsPath);
+    expect(getSettings().defaultPermissionMode).toBe("bypassPermissions");
+  });
+
+  it("accepts all valid defaultPermissionMode values", () => {
+    for (const mode of ["plan", "default", "acceptEdits", "bypassPermissions"] as const) {
+      updateSettings({ defaultPermissionMode: mode });
+      expect(getSettings().defaultPermissionMode).toBe(mode);
+    }
+  });
+
+  it("defaults defaultPermissionMode to plan for invalid values on disk", () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({ defaultPermissionMode: "invalid" }),
+      "utf-8",
+    );
+    _resetForTest(settingsPath);
+    expect(getSettings().defaultPermissionMode).toBe("plan");
+  });
+
+  it("defaults defaultPermissionMode to plan for non-string values on disk", () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({ defaultPermissionMode: 42 }),
+      "utf-8",
+    );
+    _resetForTest(settingsPath);
+    expect(getSettings().defaultPermissionMode).toBe("plan");
+  });
+
+  it("preserves defaultPermissionMode when updating other settings", () => {
+    updateSettings({ defaultPermissionMode: "acceptEdits" });
+    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
+    expect(updated.defaultPermissionMode).toBe("acceptEdits");
   });
 });

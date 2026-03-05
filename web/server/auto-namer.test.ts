@@ -27,6 +27,7 @@ beforeEach(() => {
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
+    defaultPermissionMode: "plan",
     updateChannel: "stable",
     updatedAt: 0,
   });
@@ -61,6 +62,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -102,6 +104,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -172,6 +175,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
       updateChannel: "stable",
       updatedAt: 0,
     });

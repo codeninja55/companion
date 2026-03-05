@@ -94,7 +94,11 @@ export function getDefaultModel(backend: BackendType): string {
   return backend === "codex" ? CODEX_MODELS[0].value : CLAUDE_MODELS[0].value;
 }
 
-export function getDefaultMode(backend: BackendType): string {
+export function getDefaultMode(backend: BackendType, override?: string): string {
+  if (override) {
+    const modes = backend === "codex" ? CODEX_MODES : CLAUDE_MODES;
+    if (modes.some((m) => m.value === override)) return override;
+  }
   return backend === "codex" ? CODEX_MODES[0].value : CLAUDE_MODES[0].value;
 }
 
