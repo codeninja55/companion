@@ -260,4 +260,3 @@ gh pr edit --body-file /tmp/pr_body.md
 - **VERIFY** all links. Every link, both internal and external, must be tested and functional before publication.
 - Maintain consistency. Use consistent terminology, formatting, and language variety throughout all documentation.
 - Valid technical references. Ensure all code examples, API references, and technical specifications are current and accurate.
-
