@@ -1134,7 +1134,7 @@ describe("CLI message routing", () => {
     expect(bridge.getSession("s1")!.state.git_branch).toBe("feat/new-branch");
   });
 
-  it("result: computes context_used_percent from modelUsage", () => {
+  it("result: stores contextWindow from modelUsage without overwriting context_used_percent", () => {
     const msg = JSON.stringify({
       type: "result",
       subtype: "success",
@@ -1163,8 +1163,66 @@ describe("CLI message routing", () => {
     bridge.handleCLIMessage(cli, msg);
 
     const state = bridge.getSession("s1")!.state;
-    // (8000 + 2000) / 200000 * 100 = 5
-    expect(state.context_used_percent).toBe(5);
+    // result handler stores contextWindow but does NOT compute context_used_percent
+    // (that's done by stream_event message_start using per-API-call usage)
+    expect(state.claude_token_details?.contextWindow).toBe(200000);
+    expect(state.context_used_percent).toBe(0);
+  });
+
+  it("stream_event message_start: computes context_used_percent from per-call usage", () => {
+    // First, set contextWindow via a result message
+    bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      duration_ms: 1000,
+      duration_api_ms: 800,
+      num_turns: 1,
+      total_cost_usd: 0.01,
+      stop_reason: "end_turn",
+      usage: { input_tokens: 100, output_tokens: 50 },
+      modelUsage: {
+        "claude-sonnet-4-6": {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          contextWindow: 200000,
+          maxOutputTokens: 16384,
+          costUSD: 0.01,
+        },
+      },
+      uuid: "uuid-r1",
+      session_id: "s1",
+    }));
+
+    // Now send a message_start stream event with per-call usage
+    bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "stream_event",
+      event: {
+        type: "message_start",
+        message: {
+          model: "claude-sonnet-4-6",
+          id: "msg_test",
+          type: "message",
+          role: "assistant",
+          content: [],
+          usage: {
+            input_tokens: 500,
+            cache_read_input_tokens: 43000,
+            cache_creation_input_tokens: 500,
+            output_tokens: 0,
+          },
+        },
+      },
+      parent_tool_use_id: null,
+      uuid: "uuid-se1",
+      session_id: "s1",
+    }));
+
+    const state = bridge.getSession("s1")!.state;
+    // (500 + 43000 + 500) / 200000 * 100 = 22
+    expect(state.context_used_percent).toBe(22);
   });
 
   it("stream_event: broadcasts without storing", () => {

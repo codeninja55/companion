@@ -855,10 +855,6 @@ export class WsBridge {
         totalCacheCreation += usage.cacheCreationInputTokens;
         if (usage.contextWindow > 0) {
           contextWindow = Math.max(contextWindow, usage.contextWindow);
-          const pct = Math.round(
-            ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
-          );
-          session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
         }
       }
       session.state.claude_token_details = {
@@ -940,6 +936,24 @@ export class WsBridge {
       // Reset accumulator on new message start
       if (evt.type === "message_start") {
         session.streamedThinking = "";
+
+        // Extract per-API-call usage to compute accurate context window utilization.
+        // The cumulative modelUsage.inputTokens only counts non-cached input, which
+        // vastly understates actual context usage. The message_start event contains
+        // the real per-call breakdown including cache tokens.
+        const message = evt.message as Record<string, unknown> | undefined;
+        const usage = message?.usage as Record<string, number> | undefined;
+        if (usage) {
+          const contextWindow = session.state.claude_token_details?.contextWindow ?? 0;
+          if (contextWindow > 0) {
+            const usedInContext =
+              (usage.input_tokens || 0) +
+              (usage.cache_read_input_tokens || 0) +
+              (usage.cache_creation_input_tokens || 0);
+            const pct = Math.round((usedInContext / contextWindow) * 100);
+            session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
+          }
+        }
       }
     }
 
