@@ -22,6 +22,7 @@ import { EnvManager } from "./EnvManager.js";
 import { ProviderManager } from "./ProviderManager.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { RemoteConnect } from "./RemoteConnect.js";
+import { RemoteManager } from "./RemoteManager.js";
 import { AddDirsModal } from "./AddDirsModal.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { LinearSection } from "./home/LinearSection.js";
@@ -157,6 +158,9 @@ export function HomePage() {
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [showRemoteConnect, setShowRemoteConnect] = useState(false);
+  const [showRemoteDropdown, setShowRemoteDropdown] = useState(false);
+  const [showRemoteManager, setShowRemoteManager] = useState(false);
+  const [remoteProfiles, setRemoteProfiles] = useState<import("../types.js").RemoteProfile[]>([]);
   const [remoteConnectionId, setRemoteConnectionId] = useState<string | null>(null);
   const [remoteCwd, setRemoteCwd] = useState<string | null>(null);
   const [showBranchingControls, setShowBranchingControls] = useState(false);
@@ -188,6 +192,7 @@ export function HomePage() {
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const envDropdownRef = useRef<HTMLDivElement>(null);
+  const remoteDropdownRef = useRef<HTMLDivElement>(null);
 
   const currentSessionId = useStore((s) => s.currentSessionId);
 
@@ -222,6 +227,7 @@ export function HomePage() {
       }
     }).catch(() => {});
     api.listEnvs().then(setEnvs).catch(() => {});
+    api.listRemoteProfiles().then(setRemoteProfiles).catch(() => {});
     api.getBackends().then(setBackends).catch(() => {});
     api.getSettings().then((s) => {
       setLinearConfigured(s.linearApiKeyConfigured);
@@ -329,6 +335,9 @@ export function HomePage() {
       }
       if (providerDropdownRef.current && !providerDropdownRef.current.contains(e.target as Node)) {
         setShowProviderDropdown(false);
+      }
+      if (remoteDropdownRef.current && !remoteDropdownRef.current.contains(e.target as Node)) {
+        setShowRemoteDropdown(false);
       }
     }
     document.addEventListener("pointerdown", handleClick);
@@ -1068,9 +1077,9 @@ export function HomePage() {
             )}
           </div>
 
-          {/* Remote SSH button — hidden for Codex */}
+          {/* Remote SSH dropdown — hidden for Codex */}
           {backend !== "codex" && (
-            <div>
+            <div className="relative" ref={remoteDropdownRef}>
               {remoteConnectionId ? (
                 <button
                   onClick={() => { setRemoteConnectionId(null); setRemoteCwd(null); }}
@@ -1086,7 +1095,8 @@ export function HomePage() {
                 </button>
               ) : (
                 <button
-                  onClick={() => setShowRemoteConnect(true)}
+                  onClick={() => setShowRemoteDropdown(!showRemoteDropdown)}
+                  aria-expanded={showRemoteDropdown}
                   className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-cc-muted hover:text-cc-fg rounded-md hover:bg-cc-hover transition-colors cursor-pointer"
                   data-testid="remote-btn"
                 >
@@ -1094,7 +1104,64 @@ export function HomePage() {
                     <path d="M0 2.5A1.5 1.5 0 011.5 1h5.879a1.5 1.5 0 011.06.44l.44.44H14.5A1.5 1.5 0 0116 3.38v1.12H0V2.5zM16 6H0v7.5A1.5 1.5 0 001.5 15h13a1.5 1.5 0 001.5-1.5V6zM5 10.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5z" />
                   </svg>
                   Remote
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-50">
+                    <path d="M4 6l4 4 4-4" />
+                  </svg>
                 </button>
+              )}
+              {showRemoteDropdown && (
+                <div className="absolute left-0 bottom-full mb-1 w-56 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1">
+                  <button
+                    onClick={() => {
+                      setRemoteConnectionId(null);
+                      setRemoteCwd(null);
+                      setShowRemoteDropdown(false);
+                    }}
+                    className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
+                      !remoteConnectionId ? "text-cc-primary font-medium" : "text-cc-fg"
+                    }`}
+                    data-testid="remote-local-option"
+                  >
+                    No remote (local)
+                  </button>
+                  {remoteProfiles.length > 0 && (
+                    <div className="border-t border-cc-border my-1" />
+                  )}
+                  {remoteProfiles.map((p) => (
+                    <button
+                      key={p.slug}
+                      onClick={() => {
+                        setShowRemoteDropdown(false);
+                        setShowRemoteConnect(true);
+                      }}
+                      className="w-full px-3 py-2 text-xs text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                      data-testid={`remote-profile-${p.slug}`}
+                    >
+                      {p.name} <span className="text-cc-muted">({p.username}@{p.host})</span>
+                    </button>
+                  ))}
+                  <div className="border-t border-cc-border my-1" />
+                  <button
+                    onClick={() => {
+                      setShowRemoteDropdown(false);
+                      setShowRemoteConnect(true);
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                    data-testid="remote-connect-manual"
+                  >
+                    Connect manually...
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRemoteDropdown(false);
+                      setShowRemoteManager(true);
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                    data-testid="remote-manage-btn"
+                  >
+                    Manage remotes...
+                  </button>
+                </div>
               )}
               {showRemoteConnect && (
                 <RemoteConnect
@@ -1103,6 +1170,14 @@ export function HomePage() {
                     setRemoteConnectionId(connId);
                     setRemoteCwd(cwdPath);
                     setShowRemoteConnect(false);
+                  }}
+                />
+              )}
+              {showRemoteManager && (
+                <RemoteManager
+                  onClose={() => {
+                    setShowRemoteManager(false);
+                    api.listRemoteProfiles().then(setRemoteProfiles).catch(() => {});
                   }}
                 />
               )}

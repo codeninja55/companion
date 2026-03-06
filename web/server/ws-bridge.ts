@@ -82,6 +82,7 @@ export class WsBridge {
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
   private onResultCompleted: ((sessionId: string) => void) | null = null;
+  private signalSender: ((sessionId: string, signal: "SIGINT" | "SIGTERM") => boolean) | null = null;
   private autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
@@ -114,6 +115,11 @@ export class WsBridge {
   /** Register a callback for when a session produces a result (turn complete). */
   onResultCompletedCallback(cb: (sessionId: string) => void): void {
     this.onResultCompleted = cb;
+  }
+
+  /** Set a callback for sending OS signals to CLI processes (used for interrupt). */
+  setSignalSender(sender: (sessionId: string, signal: "SIGINT" | "SIGTERM") => boolean): void {
+    this.signalSender = sender;
   }
 
   /** Register a callback for when git info is resolved and branch is known. */
@@ -205,6 +211,7 @@ export class WsBridge {
         processedClientMessageIdSet: new Set(
           Array.isArray(p.processedClientMessageIds) ? p.processedClientMessageIds : [],
         ),
+        streamedThinking: "",
       };
       session.state.backend_type = session.backendType;
       // Resolve git info for restored sessions (may have been persisted without it)
@@ -305,6 +312,7 @@ export class WsBridge {
         lastAckSeq: 0,
         processedClientMessageIds: [],
         processedClientMessageIdSet: new Set(),
+        streamedThinking: "",
       };
       this.sessions.set(sessionId, session);
     } else if (backendType) {
@@ -784,6 +792,25 @@ export class WsBridge {
   }
 
   private handleAssistantMessage(session: Session, msg: CLIAssistantMessage) {
+    // Patch bogus thinking blocks from local models (Qwen, DeepSeek).
+    // The CLI creates thinking blocks with just "<think>" as content when
+    // proxying local models that use reasoning_content. Replace these with
+    // the actual thinking text accumulated from stream_event thinking_delta.
+    if (session.streamedThinking && msg.message?.content) {
+      const content = msg.message.content as Array<{ type: string; thinking?: string }>;
+      for (const block of content) {
+        if (
+          block.type === "thinking" &&
+          typeof block.thinking === "string" &&
+          /^<\/?think>$/i.test(block.thinking.trim())
+        ) {
+          block.thinking = session.streamedThinking;
+        }
+      }
+    }
+    // Reset the accumulator after patching
+    session.streamedThinking = "";
+
     // Normalize <think>...</think> XML tags in text blocks into ThinkingBlock objects.
     // Local models (Qwen, DeepSeek) emit these instead of native thinking blocks.
     const normalizedContent = splitThinkTags(msg.message.content);
@@ -900,6 +927,22 @@ export class WsBridge {
   }
 
   private handleStreamEvent(session: Session, msg: CLIStreamEventMessage) {
+    // Accumulate thinking_delta content so we can patch bogus <think> blocks
+    // in the final assistant message (local models like Qwen, DeepSeek).
+    const evt = msg.event as Record<string, unknown> | undefined;
+    if (evt && typeof evt === "object") {
+      if (evt.type === "content_block_delta") {
+        const delta = evt.delta as Record<string, unknown> | undefined;
+        if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+          session.streamedThinking += delta.thinking;
+        }
+      }
+      // Reset accumulator on new message start
+      if (evt.type === "message_start") {
+        session.streamedThinking = "";
+      }
+    }
+
     this.broadcastToBrowsers(session, {
       type: "stream_event",
       event: msg.event,
@@ -1100,7 +1143,7 @@ export class WsBridge {
         break;
 
       case "interrupt":
-        handleInterrupt(session, this.sendToCLI.bind(this));
+        handleInterrupt(session, this.sendToCLI.bind(this), this.signalSender ?? undefined);
         break;
 
       case "set_model":

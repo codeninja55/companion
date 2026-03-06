@@ -14,5 +14,8 @@ export function cleanStreamingThinkTags(raw: string): {
   if (openIdx !== -1) {
     display = display.slice(0, openIdx);
   }
+  // Strip trailing partial <think tag that's still being streamed
+  // (e.g., "<", "<th", "<thi", "<thin", "<think")
+  display = display.replace(/<(?:t(?:h(?:i(?:n(?:k)?)?)?)?)?$/i, "");
   return { display: display.trim(), isThinking };
 }

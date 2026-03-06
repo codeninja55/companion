@@ -33,4 +33,17 @@ describe("cleanStreamingThinkTags", () => {
     const result = cleanStreamingThinkTags("<think>reasoning");
     expect(result).toEqual({ display: "", isThinking: true });
   });
+
+  it("strips trailing partial <think tag prefixes", () => {
+    // Single '<' at end
+    expect(cleanStreamingThinkTags("Hello <").display).toBe("Hello");
+    // Partial '<th' at end
+    expect(cleanStreamingThinkTags("Hello <th").display).toBe("Hello");
+    // Partial '<thin' at end
+    expect(cleanStreamingThinkTags("Hello <thin").display).toBe("Hello");
+    // Partial '<think' at end (no '>')
+    expect(cleanStreamingThinkTags("Hello <think").display).toBe("Hello");
+    // Full tag should still be handled by the existing logic, not this regex
+    expect(cleanStreamingThinkTags("Hello <think>reasoning").display).toBe("Hello");
+  });
 });

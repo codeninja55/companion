@@ -706,6 +706,142 @@ describe("handleMessage: result", () => {
 });
 
 // ===========================================================================
+// handleMessage: result — thinking-only enrichment
+// ===========================================================================
+describe("handleMessage: result enriches thinking-only assistant messages", () => {
+  it("appends result text to thinking-only assistant message", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // Simulate an assistant message with only a thinking block
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-think-1",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "thinking", thinking: "Let me reason..." }],
+        stop_reason: "end_turn",
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Fire result with text
+    fireMessage({
+      type: "result",
+      data: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Here is the answer.",
+        duration_ms: 1000,
+        duration_api_ms: 800,
+        num_turns: 1,
+        total_cost_usd: 0.01,
+        stop_reason: "end_turn",
+        usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        uuid: "u1",
+        session_id: "s1",
+      },
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs).toHaveLength(1);
+    const assistantMsg = msgs[0];
+    expect(assistantMsg.role).toBe("assistant");
+    // Should have both thinking and text blocks
+    expect(assistantMsg.contentBlocks).toHaveLength(2);
+    expect(assistantMsg.contentBlocks![0]).toMatchObject({ type: "thinking", thinking: "Let me reason..." });
+    expect(assistantMsg.contentBlocks![1]).toMatchObject({ type: "text", text: "Here is the answer." });
+  });
+
+  it("does not overwrite assistant messages that already have text blocks", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // Simulate an assistant message with both thinking and text blocks
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-full-1",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [
+          { type: "thinking", thinking: "reasoning" },
+          { type: "text", text: "visible response" },
+        ],
+        stop_reason: "end_turn",
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Fire result with text — should NOT modify the assistant message
+    fireMessage({
+      type: "result",
+      data: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "duplicate text",
+        duration_ms: 1000,
+        duration_api_ms: 800,
+        num_turns: 1,
+        total_cost_usd: 0.01,
+        stop_reason: "end_turn",
+        usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        uuid: "u1",
+        session_id: "s1",
+      },
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs[0].contentBlocks).toHaveLength(2);
+    // Text block should remain the original, not the result text
+    expect(msgs[0].contentBlocks![1]).toMatchObject({ type: "text", text: "visible response" });
+  });
+});
+
+// ===========================================================================
+// handleMessage: status_change — stop button fix
+// ===========================================================================
+describe("handleMessage: status_change", () => {
+  it("does not overwrite 'running' status with null from CLI", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // Simulate assistant message arriving (sets status to "running")
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-1",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "text", text: "Starting..." }],
+        stop_reason: null,
+      },
+      parent_tool_use_id: null,
+    });
+    expect(useStore.getState().sessionStatus.get("s1")).toBe("running");
+
+    // CLI sends null status during tool execution — should NOT overwrite running
+    fireMessage({ type: "status_change", status: null });
+    expect(useStore.getState().sessionStatus.get("s1")).toBe("running");
+  });
+
+  it("allows compacting status to override running", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    useStore.getState().setSessionStatus("s1", "running");
+    fireMessage({ type: "status_change", status: "compacting" });
+    expect(useStore.getState().sessionStatus.get("s1")).toBe("compacting");
+  });
+});
+
+// ===========================================================================
 // handleMessage: permission_request
 // ===========================================================================
 describe("handleMessage: permission_request", () => {
@@ -1117,6 +1253,91 @@ describe("handleMessage: message_history", () => {
     expect(msgs[0].role).toBe("system");
     expect(msgs[0].content).toContain("Task completed: task-1");
     expect(msgs[0].timestamp).toBe(45000);
+  });
+
+  it("enriches thinking-only assistant messages with result text on replay", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "message_history",
+      messages: [
+        { type: "user_message", content: "Hello", timestamp: 1000 },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-think-1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "thinking", thinking: "Let me think about this..." }],
+            stop_reason: "end_turn",
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "result",
+          data: {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "Here is the actual response.",
+            duration_ms: 5000,
+          },
+        },
+      ],
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs).toHaveLength(2);
+    const assistantMsg = msgs[1];
+    expect(assistantMsg.role).toBe("assistant");
+    // Should have both thinking and text blocks
+    expect(assistantMsg.contentBlocks).toHaveLength(2);
+    expect(assistantMsg.contentBlocks![0]).toMatchObject({ type: "thinking", thinking: "Let me think about this..." });
+    expect(assistantMsg.contentBlocks![1]).toMatchObject({ type: "text", text: "Here is the actual response." });
+  });
+
+  it("does not enrich assistant messages that already have text blocks on replay", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "message_history",
+      messages: [
+        {
+          type: "assistant",
+          message: {
+            id: "msg-full-1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [
+              { type: "thinking", thinking: "thinking..." },
+              { type: "text", text: "actual response" },
+            ],
+            stop_reason: "end_turn",
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "result",
+          data: {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "duplicate",
+            duration_ms: 3000,
+          },
+        },
+      ],
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs).toHaveLength(1);
+    // Should remain unchanged — already has text blocks
+    expect(msgs[0].contentBlocks).toHaveLength(2);
+    expect(msgs[0].contentBlocks![1]).toMatchObject({ type: "text", text: "actual response" });
   });
 });
 

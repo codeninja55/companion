@@ -1255,6 +1255,21 @@ export class CliLauncher {
   }
 
   /**
+   * Send a signal to a session's CLI process (e.g., SIGINT for interrupt).
+   * Returns true if the signal was sent successfully.
+   */
+  sendSignal(sessionId: string, signal: "SIGINT" | "SIGTERM"): boolean {
+    const proc = this.processes.get(sessionId);
+    if (!proc) return false;
+    try {
+      proc.kill(signal);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Kill a session's CLI process.
    */
   async kill(sessionId: string): Promise<boolean> {

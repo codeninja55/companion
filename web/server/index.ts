@@ -151,6 +151,9 @@ wsBridge.onResultCompletedCallback((sessionId) => {
     .catch(() => {}); // fire-and-forget
 });
 
+// Wire signal sending so interrupt can SIGINT the CLI subprocess
+wsBridge.setSignalSender((id, sig) => launcher.sendSignal(id, sig));
+
 console.log(`[server] Session persistence: ${sessionStore.directory}`);
 if (recorder.isGloballyEnabled()) {
   console.log(`[server] Recording enabled (dir: ${recorder.getRecordingsDir()}, max: ${recorder.getMaxLines()} lines)`);
