@@ -804,6 +804,204 @@ describe("handleMessage: result enriches thinking-only assistant messages", () =
 });
 
 // ===========================================================================
+// Incremental assistant messages — thinking + text merge
+// ===========================================================================
+describe("handleMessage: incremental assistant messages preserve thinking blocks", () => {
+  it("merges thinking-only and text-only assistant messages with same ID", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    const msgId = "msg-incremental-1";
+
+    // First: thinking-only assistant message (as CLI sends it)
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "thinking", thinking: "Let me analyze this..." }],
+        stop_reason: null,
+      },
+      parent_tool_use_id: null,
+    });
+
+    const msgsAfterFirst = useStore.getState().messages.get("s1")!;
+    expect(msgsAfterFirst).toHaveLength(1);
+    expect(msgsAfterFirst[0].contentBlocks).toHaveLength(1);
+    expect(msgsAfterFirst[0].contentBlocks![0]).toMatchObject({
+      type: "thinking",
+      thinking: "Let me analyze this...",
+    });
+
+    // Second: text-only assistant message (same ID)
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "text", text: "Here is my analysis." }],
+        stop_reason: null,
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Should still be one message with BOTH blocks merged
+    const msgsAfterSecond = useStore.getState().messages.get("s1")!;
+    expect(msgsAfterSecond).toHaveLength(1);
+    expect(msgsAfterSecond[0].contentBlocks).toHaveLength(2);
+    expect(msgsAfterSecond[0].contentBlocks![0]).toMatchObject({
+      type: "thinking",
+      thinking: "Let me analyze this...",
+    });
+    expect(msgsAfterSecond[0].contentBlocks![1]).toMatchObject({
+      type: "text",
+      text: "Here is my analysis.",
+    });
+  });
+
+  it("merges thinking + text + tool_use across three incremental messages", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    const msgId = "msg-incremental-2";
+
+    // Thinking block
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "thinking", thinking: "Planning..." }],
+        stop_reason: null,
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Text block
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "text", text: "I'll read the file." }],
+        stop_reason: null,
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Tool use block
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "tool_use", id: "tu_1", name: "Read", input: { path: "/test.ts" } }],
+        stop_reason: "tool_use",
+      },
+      parent_tool_use_id: null,
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].contentBlocks).toHaveLength(3);
+    expect(msgs[0].contentBlocks!.map((b) => b.type)).toEqual(["thinking", "text", "tool_use"]);
+    expect(msgs[0].stopReason).toBe("tool_use");
+  });
+
+  it("preserves thinking blocks when streaming draft exists between incremental messages", () => {
+    // This tests the exact scenario from production recordings:
+    // 1. message_start → draft created from thinking_delta
+    // 2. assistant (thinking only) → draft cleared, message created
+    // 3. text_delta → new draft created
+    // 4. assistant (text only) → draft cleared, merged into existing message
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    const msgId = "msg-stream-merge";
+
+    // Simulate thinking_delta streaming
+    fireMessage({
+      type: "stream_event",
+      event: {
+        type: "message_start",
+        message: { id: msgId, model: "claude-opus-4-20250514" },
+      },
+      parent_tool_use_id: null,
+    });
+    fireMessage({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        delta: { type: "thinking_delta", thinking: "Analyzing..." },
+      },
+      parent_tool_use_id: null,
+    });
+
+    // First assistant message (thinking only) — replaces draft
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "thinking", thinking: "Analyzing..." }],
+        stop_reason: null,
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Simulate text_delta streaming (creates new draft)
+    fireMessage({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        delta: { type: "text_delta", text: "Here is" },
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Second assistant message (text only) — should merge with thinking
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: msgId,
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "text", text: "Here is the result." }],
+        stop_reason: "end_turn",
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Verify: one message with both thinking and text blocks
+    const msgs = useStore.getState().messages.get("s1")!;
+    const assistantMsgs = msgs.filter((m) => m.role === "assistant" && !m.isStreaming);
+    expect(assistantMsgs).toHaveLength(1);
+    expect(assistantMsgs[0].contentBlocks).toHaveLength(2);
+    expect(assistantMsgs[0].contentBlocks![0]).toMatchObject({
+      type: "thinking",
+      thinking: "Analyzing...",
+    });
+    expect(assistantMsgs[0].contentBlocks![1]).toMatchObject({
+      type: "text",
+      text: "Here is the result.",
+    });
+  });
+});
+
+// ===========================================================================
 // handleMessage: status_change — stop button fix
 // ===========================================================================
 describe("handleMessage: status_change", () => {

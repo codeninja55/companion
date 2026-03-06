@@ -537,10 +537,13 @@ function handleParsedMessage(
         model: msg.model,
         stopReason: msg.stop_reason,
       };
-      const replacedDraft = finalizeStreamingDraftMessage(sessionId, chatMsg);
-      if (!replacedDraft) {
-        upsertAssistantMessage(sessionId, chatMsg);
-      }
+      // Clear the streaming draft, then upsert the real message. We must NOT
+      // use finalizeStreamingDraftMessage here because it removes any existing
+      // message with the same ID — that loses content blocks (e.g. thinking)
+      // when the CLI sends incremental assistant messages for the same ID
+      // (first thinking-only, then text-only, then tool_use-only).
+      clearStreamingDraftMessage(sessionId);
+      upsertAssistantMessage(sessionId, chatMsg);
       store.setStreaming(sessionId, null);
       streamingPhaseBySession.delete(sessionId);
       rawStreamingBuffer.delete(sessionId);
