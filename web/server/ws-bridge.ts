@@ -686,6 +686,7 @@ export class WsBridge {
       this.broadcastToBrowsers(session, {
         type: "status_change",
         status: msg.status ?? null,
+        permissionMode: session.state.permissionMode,
       });
       return;
     }
@@ -952,6 +953,10 @@ export class WsBridge {
               (usage.cache_creation_input_tokens || 0);
             const pct = Math.round((usedInContext / contextWindow) * 100);
             session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
+            this.broadcastToBrowsers(session, {
+              type: "session_update",
+              session: { context_used_percent: session.state.context_used_percent },
+            });
           }
         }
       }

@@ -673,12 +673,12 @@ function handleParsedMessage(
           totalCacheCreation += usage.cacheCreationInputTokens;
           if (usage.contextWindow > 0) {
             contextWindow = Math.max(contextWindow, usage.contextWindow);
-            const pct = Math.round(
-              ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
-            );
-            sessionUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
           }
         }
+        // context_used_percent is computed server-side from per-API-call
+        // message_start usage (which includes cache tokens) and broadcast
+        // via session_update. Do not overwrite it here — modelUsage only
+        // counts non-cached input, which vastly understates actual usage.
         sessionUpdates.claude_token_details = {
           inputTokens: totalInput,
           outputTokens: totalOutput,
@@ -829,6 +829,11 @@ function handleParsedMessage(
       } else if (currentStatus !== "running") {
         store.setSessionStatus(sessionId, data.status);
       }
+      // Sync permission mode changes from the CLI (e.g. when the user
+      // accepts a setMode permission suggestion).
+      if (data.permissionMode) {
+        store.updateSession(sessionId, { permissionMode: data.permissionMode });
+      }
       break;
     }
 
@@ -960,8 +965,6 @@ function handleParsedMessage(
               totalCacheCreation += usage.cacheCreationInputTokens;
               if (usage.contextWindow > 0) {
                 contextWindow = Math.max(contextWindow, usage.contextWindow);
-                const pct = Math.round(((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100);
-                resultUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
               }
             }
             resultUpdates.claude_token_details = {
