@@ -286,7 +286,7 @@ export type BrowserIncomingMessageBase =
   | { type: "permission_auto_resolved"; request: PermissionRequest; behavior: "allow" | "deny"; reason: string }
   | { type: "tool_progress"; tool_use_id: string; tool_name: string; elapsed_time_seconds: number }
   | { type: "tool_use_summary"; summary: string; tool_use_ids: string[] }
-  | { type: "status_change"; status: "compacting" | "idle" | "running" | null }
+  | { type: "status_change"; status: "compacting" | "idle" | "running" | null; permissionMode?: string }
   | { type: "auth_status"; isAuthenticating: boolean; output: string[]; error?: string }
   | { type: "error"; message: string }
   | { type: "cli_disconnected" }
