@@ -9,13 +9,18 @@ import type { Session } from "./ws-bridge-types.js";
 export function handleInterrupt(
   session: Session,
   sendToCLI: (session: Session, ndjson: string) => void,
+  signalSender?: (sessionId: string, signal: "SIGINT" | "SIGTERM") => boolean,
 ): void {
+  // Send WebSocket-level interrupt (polite request)
   const ndjson = JSON.stringify({
     type: "control_request",
     request_id: randomUUID(),
     request: { subtype: "interrupt" },
   });
   sendToCLI(session, ndjson);
+  // Also send SIGINT to the process to interrupt running subprocesses
+  // (e.g., Bash commands). This mimics Ctrl+C in the terminal.
+  signalSender?.(session.id, "SIGINT");
 }
 
 export function handleSetModel(

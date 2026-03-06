@@ -18,27 +18,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   if (message.role === "user") {
-    return (
-      <div className="flex justify-end animate-[fadeSlideIn_0.2s_ease-out]">
-        <div className="max-w-[85%] sm:max-w-[80%] px-3 sm:px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
-          {message.images && message.images.length > 0 && (
-            <div className="flex gap-2 flex-wrap mb-2">
-              {message.images.map((img, i) => (
-                <img
-                  key={i}
-                  src={`data:${img.media_type};base64,${img.data}`}
-                  alt="attachment"
-                  className="max-w-[150px] sm:max-w-[200px] max-h-[120px] sm:max-h-[150px] rounded-lg object-cover"
-                />
-              ))}
-            </div>
-          )}
-          <div className="text-[13px] sm:text-[14px] leading-relaxed break-words">
-            <MarkdownContent text={message.content} />
-          </div>
-        </div>
-      </div>
-    );
+    return <UserMessage message={message} />;
   }
 
   // Assistant message
@@ -94,6 +74,59 @@ function mapToolUsesById(blocks: ContentBlock[]): Map<string, ToolUseInfo> {
     }
   }
   return map;
+}
+
+function UserMessage({ message }: { message: ChatMessage }) {
+  const [copied, setCopied] = useState(false);
+  const hasImages = message.images && message.images.length > 0;
+
+  return (
+    <div className="flex justify-end animate-[fadeSlideIn_0.2s_ease-out] group">
+      <div className="relative max-w-[85%] sm:max-w-[80%]">
+        {/* Copy button — visible on hover */}
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(message.content).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            });
+          }}
+          className="absolute -left-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-cc-hover text-cc-muted hover:text-cc-fg"
+          title="Copy message"
+          data-testid="copy-user-msg"
+        >
+          {copied ? (
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-green-400">
+              <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" />
+              <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" />
+            </svg>
+          )}
+        </button>
+
+        <div className="px-3 sm:px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
+          {hasImages && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {message.images!.map((img, i) => (
+                <img
+                  key={i}
+                  src={`data:${img.media_type};base64,${img.data}`}
+                  alt="attachment"
+                  className="w-16 h-16 rounded-lg object-cover border border-white/10"
+                />
+              ))}
+            </div>
+          )}
+          <div className="text-[14px] sm:text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+            {message.content}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AssistantMessage({ message }: { message: ChatMessage }) {

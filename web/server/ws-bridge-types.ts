@@ -50,6 +50,9 @@ export interface Session {
   lastAckSeq: number;
   processedClientMessageIds: string[];
   processedClientMessageIdSet: Set<string>;
+  /** Accumulated thinking text from stream_event thinking_delta, used to patch
+   *  bogus `<think>` thinking blocks from local models (Qwen, DeepSeek). */
+  streamedThinking: string;
 }
 
 export type GitSessionKey =

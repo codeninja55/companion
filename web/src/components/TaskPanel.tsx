@@ -148,6 +148,7 @@ function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
   const costUsd = useStore((s) => s.sessions.get(sessionId)?.total_cost_usd ?? 0);
   const numTurns = useStore((s) => s.sessions.get(sessionId)?.num_turns ?? 0);
   const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+  const isCompacting = useStore((s) => s.sessions.get(sessionId)?.is_compacting ?? false);
 
   if (!details && costUsd === 0 && numTurns === 0) return null;
 
@@ -192,14 +193,25 @@ function ClaudeTokenDetailsSection({ sessionId }: { sessionId: string }) {
       {details && details.contextWindow > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Context</span>
-            <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+            <span className="text-[11px] text-cc-muted">
+              Context
+              <span className="ml-1 opacity-60">({formatTokenCount(details.contextWindow)})</span>
+            </span>
+            {isCompacting ? (
+              <span className="text-[11px] text-cc-warning tabular-nums animate-pulse">Compacting…</span>
+            ) : (
+              <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+            )}
           </div>
           <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
-              style={{ width: `${Math.min(contextPct, 100)}%` }}
-            />
+            {isCompacting ? (
+              <div className="h-full rounded-full bg-cc-warning/60 animate-[pulse_1.5s_ease-in-out_infinite] w-full" />
+            ) : (
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
+                style={{ width: `${Math.min(contextPct, 100)}%` }}
+              />
+            )}
           </div>
         </div>
       )}
@@ -282,6 +294,7 @@ function CodexTokenDetailsSection({ sessionId }: { sessionId: string }) {
   const details = useStore((s) => s.sessions.get(sessionId)?.codex_token_details);
   // Use the server-computed context percentage (input+output / contextWindow, capped 0-100)
   const contextPct = useStore((s) => s.sessions.get(sessionId)?.context_used_percent ?? 0);
+  const isCompacting = useStore((s) => s.sessions.get(sessionId)?.is_compacting ?? false);
 
   if (!details) return null;
 
@@ -313,14 +326,25 @@ function CodexTokenDetailsSection({ sessionId }: { sessionId: string }) {
       {details.modelContextWindow > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted">Context</span>
-            <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+            <span className="text-[11px] text-cc-muted">
+              Context
+              <span className="ml-1 opacity-60">({formatTokenCount(details.modelContextWindow)})</span>
+            </span>
+            {isCompacting ? (
+              <span className="text-[11px] text-cc-warning tabular-nums animate-pulse">Compacting…</span>
+            ) : (
+              <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
+            )}
           </div>
           <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
-              style={{ width: `${Math.min(contextPct, 100)}%` }}
-            />
+            {isCompacting ? (
+              <div className="h-full rounded-full bg-cc-warning/60 animate-[pulse_1.5s_ease-in-out_infinite] w-full" />
+            ) : (
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
+                style={{ width: `${Math.min(contextPct, 100)}%` }}
+              />
+            )}
           </div>
         </div>
       )}

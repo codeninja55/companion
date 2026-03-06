@@ -319,7 +319,7 @@ describe("Permission suggestion buttons", () => {
     const perm = makePermission({ permission_suggestions: [suggestion] });
     render(<PermissionBanner permission={perm} sessionId="s1" />);
 
-    expect(screen.getByText('Set mode to "bypassPermissions"')).toBeTruthy();
+    expect(screen.getByText("Set mode to Bypass Permissions")).toBeTruthy();
   });
 
   it("renders addDirectories suggestion with correct label", () => {

@@ -13,7 +13,9 @@ interface Props {
 export function RemoteConnect({ onClose, onSessionStart }: Props) {
   const [phase, setPhase] = useState<Phase>("select");
   const [profiles, setProfiles] = useState<RemoteProfile[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState("");
+  const [selectedSlug, setSelectedSlug] = useState(
+    () => localStorage.getItem("cc-remote-profile") || "",
+  );
   const [connection, setConnection] = useState<RemoteConnection | null>(null);
   const [hasClaudeCode, setHasClaudeCode] = useState<boolean | null>(null);
   const [remoteDirs, setRemoteDirs] = useState<string[]>([]);
@@ -136,7 +138,10 @@ export function RemoteConnect({ onClose, onSessionStart }: Props) {
           <select
             id="remote-profile-select"
             value={selectedSlug}
-            onChange={(e) => setSelectedSlug(e.target.value)}
+            onChange={(e) => {
+              setSelectedSlug(e.target.value);
+              localStorage.setItem("cc-remote-profile", e.target.value);
+            }}
             style={{ display: "block", width: "100%", marginBottom: 12 }}
           >
             <option value="">-- Choose a profile --</option>

@@ -6,10 +6,17 @@ import { sendToSession } from "../ws.js";
 import type { PermissionRequest } from "../types.js";
 import type { PermissionUpdate, AiValidationInfo } from "../../server/session-types.js";
 import { DiffViewer } from "./DiffViewer.js";
+import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
+
+/** All known modes across backends, for label lookup */
+const ALL_MODES = [...CLAUDE_MODES, ...CODEX_MODES];
 
 /** Human-readable label for a permission suggestion */
 function suggestionLabel(s: PermissionUpdate): string {
-  if (s.type === "setMode") return `Set mode to "${s.mode}"`;
+  if (s.type === "setMode") {
+    const label = ALL_MODES.find((m) => m.value === s.mode)?.label || s.mode;
+    return `Set mode to ${label}`;
+  }
   const dest = s.destination;
   const scope = dest === "session" ? "for session" : "always";
   if (s.type === "addRules" || s.type === "replaceRules") {

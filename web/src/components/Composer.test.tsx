@@ -253,20 +253,61 @@ describe("Composer sending messages", () => {
   });
 });
 
-// ─── Plan mode toggle ────────────────────────────────────────────────────────
+// ─── Mode selector dropdown ──────────────────────────────────────────────────
 
-describe("Composer plan mode toggle", () => {
-  it("pressing Shift+Tab toggles plan mode", () => {
+describe("Composer mode selector", () => {
+  it("pressing Shift+Tab cycles to next mode", () => {
+    // Default session mode is "acceptEdits" (index 1 in CLAUDE_MODES).
+    // Next mode is "default" (Default) at index 2.
     const { container } = render(<Composer sessionId="s1" />);
     const textarea = container.querySelector("textarea")!;
 
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
 
-    // Should call sendToSession to set plan mode
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", {
+      type: "set_permission_mode",
+      mode: "default",
+    });
+  });
+
+  it("mode dropdown shows all available modes for Claude sessions", () => {
+    // Validates the dropdown menu renders all Claude mode options.
+    render(<Composer sessionId="s1" />);
+    const triggers = screen.getAllByTestId("mode-dropdown-trigger");
+    fireEvent.click(triggers[0]);
+
+    // CLAUDE_MODES has "Bypass Permissions" and "Plan"
+    expect(screen.getAllByTestId("mode-option-bypassPermissions").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByTestId("mode-option-plan").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("clicking a mode sends set_permission_mode message", () => {
+    // Validates selecting a mode from the dropdown sends the correct WS message.
+    render(<Composer sessionId="s1" />);
+    const triggers = screen.getAllByTestId("mode-dropdown-trigger");
+    fireEvent.click(triggers[0]);
+
+    const planOption = screen.getAllByTestId("mode-option-plan")[0];
+    fireEvent.click(planOption);
+
     expect(mockSendToSession).toHaveBeenCalledWith("s1", {
       type: "set_permission_mode",
       mode: "plan",
     });
+  });
+
+  it("dropdown closes after selecting a mode", () => {
+    // Validates the dropdown menu closes after a mode is selected.
+    render(<Composer sessionId="s1" />);
+    const triggers = screen.getAllByTestId("mode-dropdown-trigger");
+    fireEvent.click(triggers[0]);
+
+    expect(screen.getAllByTestId("mode-dropdown-menu").length).toBeGreaterThanOrEqual(1);
+
+    const planOption = screen.getAllByTestId("mode-option-plan")[0];
+    fireEvent.click(planOption);
+
+    expect(screen.queryByTestId("mode-dropdown-menu")).toBeNull();
   });
 });
 
@@ -762,23 +803,22 @@ describe("Composer toolbar interactions", () => {
     expect(titleInput.value).toBe("My prompt text");
   });
 
-  it("mode toggle button triggers plan mode on desktop", () => {
-    // Validates clicking the mode toggle button on desktop activates plan mode.
+  it("mode dropdown trigger opens dropdown on click", () => {
+    // Validates clicking the mode dropdown trigger opens the dropdown menu.
     render(<Composer sessionId="s1" />);
-    // Mode toggle buttons have title "Toggle mode (Shift+Tab)"
-    const modeButtons = screen.getAllByTitle("Toggle mode (Shift+Tab)");
-    // Click a mode button to enter plan mode
-    fireEvent.click(modeButtons[0]);
-    expect(mockSendToSession).toHaveBeenCalledWith("s1", { type: "set_permission_mode", mode: "plan" });
+    const triggers = screen.getAllByTestId("mode-dropdown-trigger");
+    fireEvent.click(triggers[0]);
+    expect(screen.getAllByTestId("mode-dropdown-menu").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("mode toggle restores previous mode when already in plan mode", () => {
-    // Validates toggling off plan mode restores the previous permission mode.
-    setupMockStore({ session: { permissionMode: "plan" } });
+  it("selecting plan mode from dropdown sends set_permission_mode", () => {
+    // Validates selecting plan mode from the dropdown sends the correct message.
     render(<Composer sessionId="s1" />);
-    const modeButtons = screen.getAllByTitle("Toggle mode (Shift+Tab)");
-    fireEvent.click(modeButtons[0]);
-    expect(mockSendToSession).toHaveBeenCalledWith("s1", { type: "set_permission_mode", mode: "acceptEdits" });
+    const triggers = screen.getAllByTestId("mode-dropdown-trigger");
+    fireEvent.click(triggers[0]);
+    const planOption = screen.getAllByTestId("mode-option-plan")[0];
+    fireEvent.click(planOption);
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", { type: "set_permission_mode", mode: "plan" });
   });
 
   it("mobile send button dispatches message when text is entered", () => {

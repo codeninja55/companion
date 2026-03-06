@@ -384,6 +384,39 @@ export function extractTextFromBlocks(blocks: ContentBlock[]): string {
     .join("\n");
 }
 
+/**
+ * Enrich thinking-only assistant messages during history replay.
+ * When assistant messages only contain thinking blocks, the actual response text
+ * is in the following result message's `data.result` field.
+ */
+function enrichThinkingOnlyHistoryMessages(
+  chatMessages: ChatMessage[],
+  rawMessages: BrowserIncomingMessage[],
+): void {
+  for (const chatMsg of chatMessages) {
+    if (chatMsg.role !== "assistant") continue;
+    const hasTextBlock = chatMsg.contentBlocks?.some((b) => b.type === "text");
+    if (hasTextBlock) continue;
+
+    const assistantIdx = rawMessages.findIndex(
+      (m) => m.type === "assistant" && "message" in m && m.message.id === chatMsg.id,
+    );
+    if (assistantIdx < 0) continue;
+
+    for (let j = assistantIdx + 1; j < rawMessages.length; j++) {
+      const nextMsg = rawMessages[j];
+      if (nextMsg.type === "result" && nextMsg.data.result) {
+        const textBlock: ContentBlock = { type: "text", text: String(nextMsg.data.result) };
+        chatMsg.contentBlocks = [...(chatMsg.contentBlocks || []), textBlock];
+        chatMsg.content = extractTextFromBlocks(chatMsg.contentBlocks);
+        break;
+      }
+      // Stop searching if we hit the next turn's message
+      if (nextMsg.type === "assistant" || nextMsg.type === "user_message") break;
+    }
+  }
+}
+
 function mergeContentBlocks(prev?: ContentBlock[], next?: ContentBlock[]): ContentBlock[] | undefined {
   const prevBlocks = prev || [];
   const nextBlocks = next || [];
@@ -504,10 +537,13 @@ function handleParsedMessage(
         model: msg.model,
         stopReason: msg.stop_reason,
       };
-      const replacedDraft = finalizeStreamingDraftMessage(sessionId, chatMsg);
-      if (!replacedDraft) {
-        upsertAssistantMessage(sessionId, chatMsg);
-      }
+      // Clear the streaming draft, then upsert the real message. We must NOT
+      // use finalizeStreamingDraftMessage here because it removes any existing
+      // message with the same ID — that loses content blocks (e.g. thinking)
+      // when the CLI sends incremental assistant messages for the same ID
+      // (first thinking-only, then text-only, then tool_use-only).
+      clearStreamingDraftMessage(sessionId);
+      upsertAssistantMessage(sessionId, chatMsg);
       store.setStreaming(sessionId, null);
       streamingPhaseBySession.delete(sessionId);
       rawStreamingBuffer.delete(sessionId);
@@ -637,12 +673,12 @@ function handleParsedMessage(
           totalCacheCreation += usage.cacheCreationInputTokens;
           if (usage.contextWindow > 0) {
             contextWindow = Math.max(contextWindow, usage.contextWindow);
-            const pct = Math.round(
-              ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
-            );
-            sessionUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
           }
         }
+        // context_used_percent is computed server-side from per-API-call
+        // message_start usage (which includes cache tokens) and broadcast
+        // via session_update. Do not overwrite it here — modelUsage only
+        // counts non-cached input, which vastly understates actual usage.
         sessionUpdates.claude_token_details = {
           inputTokens: totalInput,
           outputTokens: totalOutput,
@@ -659,6 +695,27 @@ function handleParsedMessage(
       store.setStreamingStats(sessionId, null);
       store.clearToolProgress(sessionId);
       store.setSessionStatus(sessionId, "idle");
+
+      // Enrich the last assistant message if it has no text content but the
+      // result carries response text (common with local models where the CLI
+      // puts reasoning in a thinking block and the answer in the result).
+      if (r.result && typeof r.result === "string") {
+        const msgs = store.messages.get(sessionId) || [];
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg?.role === "assistant") {
+          const hasText = lastMsg.contentBlocks?.some((b) => b.type === "text");
+          if (!hasText) {
+            const textBlock: ContentBlock = { type: "text", text: r.result };
+            const updatedBlocks = [...(lastMsg.contentBlocks || []), textBlock];
+            store.updateLastAssistantMessage(sessionId, (m) => ({
+              ...m,
+              contentBlocks: updatedBlocks,
+              content: extractTextFromBlocks(updatedBlocks),
+            }));
+          }
+        }
+      }
+
       // Play notification sound if enabled and tab is not focused
       if (!document.hasFocus() && store.notificationSound) {
         playNotificationSound();
@@ -761,10 +818,21 @@ function handleParsedMessage(
     }
 
     case "status_change": {
+      // Only apply specific known statuses from the CLI.
+      // Don't let a null status overwrite "running" — the "running" state is set
+      // by the browser when an assistant message arrives, and should only be
+      // cleared by a result message. The CLI sends null status during tool
+      // execution which would otherwise hide the stop button.
+      const currentStatus = store.sessionStatus.get(sessionId);
       if (data.status === "compacting") {
         store.setSessionStatus(sessionId, "compacting");
-      } else {
+      } else if (currentStatus !== "running") {
         store.setSessionStatus(sessionId, data.status);
+      }
+      // Sync permission mode changes from the CLI (e.g. when the user
+      // accepts a setMode permission suggestion).
+      if (data.permissionMode) {
+        store.updateSession(sessionId, { permissionMode: data.permissionMode });
       }
       break;
     }
@@ -897,8 +965,6 @@ function handleParsedMessage(
               totalCacheCreation += usage.cacheCreationInputTokens;
               if (usage.contextWindow > 0) {
                 contextWindow = Math.max(contextWindow, usage.contextWindow);
-                const pct = Math.round(((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100);
-                resultUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
               }
             }
             resultUpdates.claude_token_details = {
@@ -921,6 +987,7 @@ function handleParsedMessage(
           });
         }
       }
+      enrichThinkingOnlyHistoryMessages(chatMessages, data.messages);
       if (chatMessages.length > 0) {
         const existing = store.messages.get(sessionId) || [];
         if (existing.length === 0) {
