@@ -135,8 +135,8 @@ beforeEach(() => {
   mockApi.regenerateAuthToken.mockResolvedValue({ token: "newtoken456" });
   mockApi.getAuthQr.mockResolvedValue({
     qrCodes: [
-      { label: "LAN", url: "http://192.168.1.10:3456", qrDataUrl: "data:image/png;base64,LAN_QR" },
-      { label: "Tailscale", url: "http://100.118.112.23:3456", qrDataUrl: "data:image/png;base64,TS_QR" },
+      { label: "LAN", url: "http://192.168.1.10:4567", qrDataUrl: "data:image/png;base64,LAN_QR" },
+      { label: "Tailscale", url: "http://100.118.112.23:4567", qrDataUrl: "data:image/png;base64,TS_QR" },
     ],
   });
   mockTelemetry.getTelemetryPreferenceEnabled.mockReturnValue(true);
@@ -516,7 +516,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tailscale" }));
     const tsImg = screen.getByAltText("QR code for Tailscale login");
     expect(tsImg).toHaveAttribute("src", "data:image/png;base64,TS_QR");
-    expect(screen.getByText("http://100.118.112.23:3456")).toBeInTheDocument();
+    expect(screen.getByText("http://100.118.112.23:4567")).toBeInTheDocument();
   });
 
   // Regenerating the token calls the API and reveals the new token.

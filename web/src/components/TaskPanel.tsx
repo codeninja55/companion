@@ -495,54 +495,210 @@ function linearStatePill(stateType: string, stateName: string) {
   }
 }
 
-function LinearIssueSection({ sessionId }: { sessionId: string }) {
-  const linkedIssue = useStore((s) => s.linkedLinearIssues.get(sessionId));
+/** Accordion item for a single linked Linear issue. */
+function LinearIssueItem({
+  issue,
+  sessionId,
+  expanded,
+  onToggle,
+}: {
+  issue: LinearIssue;
+  sessionId: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const [comments, setComments] = useState<LinearComment[]>([]);
   const [assignee, setAssignee] = useState<{ name: string; avatarUrl?: string | null } | null>(null);
   const [labels, setLabels] = useState<{ id: string; name: string; color: string }[]>([]);
   const [commentText, setCommentText] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
-  const [showDoneWarning, setShowDoneWarning] = useState(false);
+
+  const pill = linearStatePill(issue.stateType, issue.stateName);
+
+  async function handleUnlink() {
+    try {
+      await api.removeLinearIssue(sessionId, issue.id);
+      useStore.getState().removeLinkedLinearIssue(sessionId, issue.id);
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleSendComment() {
+    if (!commentText.trim() || sendingComment) return;
+    setSendingComment(true);
+    try {
+      const result = await api.addLinearComment(issue.id, commentText.trim());
+      setComments((prev) => [...prev, result.comment]);
+      setCommentText("");
+    } catch {
+      // silent
+    } finally {
+      setSendingComment(false);
+    }
+  }
+
+  return (
+    <div className="border-b border-cc-border last:border-b-0">
+      {/* Accordion header */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-1.5 px-4 py-2 hover:bg-cc-hover/50 transition-colors cursor-pointer"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-2.5 h-2.5 text-cc-muted shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
+        >
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+        <a
+          href={issue.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-[11px] font-semibold text-cc-fg hover:text-cc-primary transition-colors font-mono-code"
+        >
+          {issue.identifier}
+        </a>
+        <span className={`text-[9px] font-medium px-1.5 rounded-full leading-[16px] ${pill.cls}`}>
+          {pill.label}
+        </span>
+        <span className="text-[11px] text-cc-muted truncate ml-1">{issue.title}</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); handleUnlink(); }}
+          className="ml-auto flex items-center justify-center w-5 h-5 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+          title="Unlink issue"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+            <path d="M4 4l8 8M12 4l-8 8" />
+          </svg>
+        </button>
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-4 pb-3 space-y-2">
+          {/* Metadata: priority + team + assignee */}
+          <div className="flex items-center gap-2 text-[10px] text-cc-muted pl-4">
+            {issue.priorityLabel && <span>{issue.priorityLabel}</span>}
+            {issue.teamName && (
+              <>
+                {issue.priorityLabel && <span>&middot;</span>}
+                <span>{issue.teamName}</span>
+              </>
+            )}
+            {assignee && (
+              <>
+                <span>&middot;</span>
+                <span>@ {assignee.name}</span>
+              </>
+            )}
+          </div>
+
+          {/* Labels */}
+          {labels.length > 0 && (
+            <div className="flex flex-wrap gap-1 pl-4">
+              {labels.map((l) => (
+                <span
+                  key={l.id}
+                  className="text-[9px] px-1.5 py-0.5 rounded-full"
+                  style={{ backgroundColor: `${l.color}20`, color: l.color }}
+                >
+                  {l.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Done warning */}
+          {issue.stateType === "completed" && (
+            <div className="ml-4 py-1.5 px-2 bg-cc-success/10 rounded-md">
+              <p className="text-[10px] text-cc-success font-medium">Issue completed</p>
+            </div>
+          )}
+
+          {/* Recent comments */}
+          {comments.length > 0 && (
+            <div className="pl-4 space-y-1.5 max-h-36 overflow-y-auto">
+              <span className="text-[10px] text-cc-muted uppercase tracking-wider">Comments</span>
+              {comments.slice(-3).map((comment) => (
+                <div key={comment.id} className="text-[11px]">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-cc-fg">{comment.userName}</span>
+                    <span className="text-[9px] text-cc-muted">{timeAgo(new Date(comment.createdAt).getTime())}</span>
+                  </div>
+                  <p className="text-cc-muted line-clamp-2">{comment.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add comment input */}
+          <div className="pl-4 flex items-center gap-1.5">
+            <input
+              type="text"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+              placeholder="Add a comment..."
+              aria-label={`Add a comment to ${issue.identifier}`}
+              className="flex-1 text-[11px] bg-transparent border border-cc-border rounded-md px-2 py-1.5 text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+            />
+            <button
+              onClick={handleSendComment}
+              disabled={!commentText.trim() || sendingComment}
+              className="flex items-center justify-center w-6 h-6 rounded text-cc-primary disabled:text-cc-muted cursor-pointer disabled:cursor-not-allowed transition-colors"
+              title="Send comment"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.19.736-5.19.737a.5.5 0 0 0-.397.353L1.01 13.48a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinearIssueSection({ sessionId }: { sessionId: string }) {
+  const linkedIssues = useStore((s) => s.linkedLinearIssues.get(sessionId)) ?? [];
+  const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LinearIssue[]>([]);
   const [searching, setSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Load stored linked issue from server on mount
+  // Load stored linked issues from server on mount
   useEffect(() => {
-    api.getLinkedLinearIssue(sessionId).then((data) => {
-      if (data.issue) {
-        useStore.getState().setLinkedLinearIssue(sessionId, data.issue);
+    api.getLinkedLinearIssues(sessionId).then((data) => {
+      if (data.issues.length > 0) {
+        useStore.getState().setLinkedLinearIssues(sessionId, data.issues);
       }
     }).catch(() => {});
   }, [sessionId]);
 
-  // Fetch fresh data from Linear periodically
+  // Refresh issue data periodically
   const fetchIssueDetails = useCallback(async () => {
-    if (!linkedIssue) return;
+    if (linkedIssues.length === 0) return;
     try {
-      const data = await api.getLinkedLinearIssue(sessionId, true);
-      if (data.issue) {
-        useStore.getState().setLinkedLinearIssue(sessionId, data.issue);
-        if (data.issue.stateType === "completed") {
-          setShowDoneWarning(true);
-        }
+      const data = await api.getLinkedLinearIssues(sessionId, true);
+      if (data.issues.length > 0) {
+        useStore.getState().setLinkedLinearIssues(sessionId, data.issues);
       }
-      if (data.comments) setComments(data.comments);
-      if (data.assignee !== undefined) setAssignee(data.assignee ?? null);
-      if (data.labels) setLabels(data.labels);
     } catch {
       // silent
     }
-  }, [sessionId, linkedIssue]);
+  }, [sessionId, linkedIssues.length]);
 
   useEffect(() => {
-    if (!linkedIssue) return;
+    if (linkedIssues.length === 0) return;
     fetchIssueDetails();
     const id = setInterval(fetchIssueDetails, LINEAR_POLL_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchIssueDetails, linkedIssue]);
+  }, [fetchIssueDetails, linkedIssues.length]);
 
   // Search debounce
   useEffect(() => {
@@ -570,37 +726,10 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
     }
   }, [showSearch]);
 
-  async function handleSendComment() {
-    if (!linkedIssue || !commentText.trim() || sendingComment) return;
-    setSendingComment(true);
-    try {
-      const result = await api.addLinearComment(linkedIssue.id, commentText.trim());
-      setComments((prev) => [...prev, result.comment]);
-      setCommentText("");
-    } catch {
-      // silent
-    } finally {
-      setSendingComment(false);
-    }
-  }
-
-  async function handleUnlink() {
-    try {
-      await api.unlinkLinearIssue(sessionId);
-      useStore.getState().setLinkedLinearIssue(sessionId, null);
-      setComments([]);
-      setAssignee(null);
-      setLabels([]);
-      setShowDoneWarning(false);
-    } catch {
-      // silent
-    }
-  }
-
   async function handleLinkIssue(issue: LinearIssue) {
     try {
-      await api.linkLinearIssue(sessionId, issue);
-      useStore.getState().setLinkedLinearIssue(sessionId, issue);
+      await api.addLinearIssue(sessionId, issue);
+      useStore.getState().addLinkedLinearIssue(sessionId, issue);
       setShowSearch(false);
       setSearchQuery("");
       setSearchResults([]);
@@ -609,17 +738,31 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
     }
   }
 
-  // No linked issue — show "Link" button or search
-  if (!linkedIssue) {
-    return (
-      <div className="shrink-0 px-4 py-3">
+  // Auto-expand first issue when there's only one
+  const effectiveExpandedId = linkedIssues.length === 1 ? linkedIssues[0].id : expandedIssueId;
+
+  return (
+    <div className="shrink-0">
+      {/* Linked issues accordion */}
+      {linkedIssues.map((issue) => (
+        <LinearIssueItem
+          key={issue.id}
+          issue={issue}
+          sessionId={sessionId}
+          expanded={effectiveExpandedId === issue.id}
+          onToggle={() => setExpandedIssueId(effectiveExpandedId === issue.id ? null : issue.id)}
+        />
+      ))}
+
+      {/* Link additional issue — always available */}
+      <div className="px-4 py-2">
         {!showSearch ? (
           <button
             onClick={() => setShowSearch(true)}
             className="flex items-center gap-1.5 text-[11px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
           >
             <LinearLogo className="w-3.5 h-3.5" />
-            Link Linear issue
+            {linkedIssues.length === 0 ? "Link Linear issue" : "Link another issue"}
           </button>
         ) : (
           <div className="space-y-2">
@@ -670,149 +813,6 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
             )}
           </div>
         )}
-      </div>
-    );
-  }
-
-  // Linked issue display
-  const pill = linearStatePill(linkedIssue.stateType, linkedIssue.stateName);
-
-  return (
-    <div className="shrink-0">
-      {/* Header: identifier + state pill + unlink */}
-      <div className="px-4 py-3 space-y-2">
-        <div className="flex items-center gap-1.5">
-          <LinearLogo className="w-3.5 h-3.5 text-cc-muted shrink-0" />
-          <a
-            href={linkedIssue.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[12px] font-semibold text-cc-fg hover:text-cc-primary transition-colors font-mono-code"
-          >
-            {linkedIssue.identifier}
-          </a>
-          <span className={`text-[9px] font-medium px-1.5 rounded-full leading-[16px] ${pill.cls}`}>
-            {pill.label}
-          </span>
-          <button
-            onClick={handleUnlink}
-            className="ml-auto flex items-center justify-center w-5 h-5 rounded text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            title="Unlink issue"
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
-              <path d="M4 4l8 8M12 4l-8 8" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Title */}
-        <p className="text-[11px] text-cc-muted truncate" title={linkedIssue.title}>
-          {linkedIssue.title}
-        </p>
-
-        {/* Metadata: priority + team + assignee */}
-        <div className="flex items-center gap-2 text-[10px] text-cc-muted">
-          {linkedIssue.priorityLabel && (
-            <span>{linkedIssue.priorityLabel}</span>
-          )}
-          {linkedIssue.teamName && (
-            <>
-              {linkedIssue.priorityLabel && <span>&middot;</span>}
-              <span>{linkedIssue.teamName}</span>
-            </>
-          )}
-          {assignee && (
-            <>
-              <span>&middot;</span>
-              <span>@ {assignee.name}</span>
-            </>
-          )}
-        </div>
-
-        {/* Labels */}
-        {labels.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {labels.map((l) => (
-              <span
-                key={l.id}
-                className="text-[9px] px-1.5 py-0.5 rounded-full"
-                style={{ backgroundColor: `${l.color}20`, color: l.color }}
-              >
-                {l.name}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Done warning */}
-      {showDoneWarning && linkedIssue.stateType === "completed" && (
-        <div className="px-4 py-2 bg-cc-success/10 border-t border-cc-success/20 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[11px] text-cc-success font-medium">Issue completed</p>
-            <p className="text-[10px] text-cc-success/80">Ticket moved to done.</p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setShowDoneWarning(false)}
-              className="text-[10px] text-cc-muted hover:text-cc-fg px-1.5 py-0.5 rounded cursor-pointer"
-            >
-              Dismiss
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await api.archiveSession(sessionId);
-                  useStore.getState().newSession();
-                } catch {
-                  // silent
-                }
-              }}
-              className="text-[10px] text-cc-success font-medium px-2 py-0.5 rounded bg-cc-success/20 hover:bg-cc-success/30 cursor-pointer"
-            >
-              Close session
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Recent comments */}
-      {comments.length > 0 && (
-        <div className="px-4 py-2 space-y-1.5 max-h-36 overflow-y-auto">
-          <span className="text-[10px] text-cc-muted uppercase tracking-wider">Comments</span>
-          {comments.slice(-3).map((comment) => (
-            <div key={comment.id} className="text-[11px]">
-              <div className="flex items-center gap-1">
-                <span className="font-medium text-cc-fg">{comment.userName}</span>
-                <span className="text-[9px] text-cc-muted">{timeAgo(new Date(comment.createdAt).getTime())}</span>
-              </div>
-              <p className="text-cc-muted line-clamp-2">{comment.body}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Add comment input */}
-      <div className="px-4 py-2 flex items-center gap-1.5">
-        <input
-          type="text"
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-          placeholder="Add a comment..."
-          aria-label="Add a comment"
-          className="flex-1 text-[11px] bg-transparent border border-cc-border rounded-md px-2 py-1.5 text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
-        />
-        <button
-          onClick={handleSendComment}
-          disabled={!commentText.trim() || sendingComment}
-          className="flex items-center justify-center w-6 h-6 rounded text-cc-primary disabled:text-cc-muted cursor-pointer disabled:cursor-not-allowed transition-colors"
-          title="Send comment"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-            <path d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.19.736-5.19.737a.5.5 0 0 0-.397.353L1.01 13.48a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5z" />
-          </svg>
-        </button>
       </div>
     </div>
   );

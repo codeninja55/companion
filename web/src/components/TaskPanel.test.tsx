@@ -7,12 +7,12 @@ vi.mock("../api.js", () => ({
   api: {
     getSessionUsageLimits: vi.fn().mockRejectedValue(new Error("skip")),
     getPRStatus: vi.fn().mockRejectedValue(new Error("skip")),
-    getLinkedLinearIssue: vi.fn().mockResolvedValue({ issue: null }),
+    getLinkedLinearIssues: vi.fn().mockResolvedValue({ issues: [] }),
     gitPull: vi.fn().mockResolvedValue({ success: true, git_ahead: 0, git_behind: 0, output: "" }),
     searchLinearIssues: vi.fn().mockResolvedValue({ issues: [] }),
     addLinearComment: vi.fn().mockResolvedValue({ comment: { id: "c1", body: "test", createdAt: new Date().toISOString(), userName: "User" } }),
-    unlinkLinearIssue: vi.fn().mockResolvedValue({}),
-    linkLinearIssue: vi.fn().mockResolvedValue({}),
+    removeLinearIssue: vi.fn().mockResolvedValue({}),
+    addLinearIssue: vi.fn().mockResolvedValue({}),
     archiveSession: vi.fn().mockResolvedValue({}),
   },
 }));
@@ -87,7 +87,9 @@ interface MockStoreState {
   setPRStatus: ReturnType<typeof vi.fn>;
   updateSession: ReturnType<typeof vi.fn>;
   newSession: ReturnType<typeof vi.fn>;
-  setLinkedLinearIssue: ReturnType<typeof vi.fn>;
+  setLinkedLinearIssues: ReturnType<typeof vi.fn>;
+  addLinkedLinearIssue: ReturnType<typeof vi.fn>;
+  removeLinkedLinearIssue: ReturnType<typeof vi.fn>;
   toolProgress: Map<string, Map<string, { toolName: string; elapsedSeconds: number }>>;
 }
 
@@ -112,7 +114,9 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     setPRStatus: vi.fn(),
     updateSession: vi.fn(),
     newSession: vi.fn(),
-    setLinkedLinearIssue: vi.fn(),
+    setLinkedLinearIssues: vi.fn(),
+    addLinkedLinearIssue: vi.fn(),
+    removeLinkedLinearIssue: vi.fn(),
     toolProgress: new Map(),
     ...overrides,
   };
@@ -1269,15 +1273,12 @@ describe("LinearIssueSection", () => {
 
   it("renders linked issue identifier and state pill", async () => {
     // When an issue is linked, show its identifier and state
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: mockLinearIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [mockLinearIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", mockLinearIssue]]),
+      linkedLinearIssues: new Map([["s1", [mockLinearIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByText("ENG-123")).toBeInTheDocument();
@@ -1287,15 +1288,12 @@ describe("LinearIssueSection", () => {
 
   it("renders priority and team name for linked issue", async () => {
     // Metadata row should include priority label and team name
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: mockLinearIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [mockLinearIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", mockLinearIssue]]),
+      linkedLinearIssues: new Map([["s1", [mockLinearIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByText("High")).toBeInTheDocument();
@@ -1304,31 +1302,25 @@ describe("LinearIssueSection", () => {
 
   it("shows the comment input when an issue is linked", () => {
     // Linked issues should always have the comment input visible
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: mockLinearIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [mockLinearIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", mockLinearIssue]]),
+      linkedLinearIssues: new Map([["s1", [mockLinearIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
-    expect(screen.getByLabelText("Add a comment")).toBeInTheDocument();
+    expect(screen.getByLabelText("Add a comment to ENG-123")).toBeInTheDocument();
   });
 
   it("shows unlink button for linked issue", () => {
     // Linked issues should have an unlink button
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: mockLinearIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [mockLinearIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", mockLinearIssue]]),
+      linkedLinearIssues: new Map([["s1", [mockLinearIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByTitle("Unlink issue")).toBeInTheDocument();
@@ -1337,15 +1329,12 @@ describe("LinearIssueSection", () => {
   it("renders correct state pill for different state types", () => {
     // Verify linearStatePill produces correct labels for various state types
     const completedIssue = { ...mockLinearIssue, stateType: "completed", stateName: "Done" };
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: completedIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [completedIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", completedIssue]]),
+      linkedLinearIssues: new Map([["s1", [completedIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByText("Done")).toBeInTheDocument();
@@ -1353,15 +1342,12 @@ describe("LinearIssueSection", () => {
 
   it("renders cancelled state pill", () => {
     const cancelledIssue = { ...mockLinearIssue, stateType: "cancelled", stateName: "Cancelled" };
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: cancelledIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [cancelledIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", cancelledIssue]]),
+      linkedLinearIssues: new Map([["s1", [cancelledIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByText("Cancelled")).toBeInTheDocument();
@@ -1369,15 +1355,12 @@ describe("LinearIssueSection", () => {
 
   it("renders unstarted state pill with correct label", () => {
     const unstartedIssue = { ...mockLinearIssue, stateType: "unstarted", stateName: "Todo" };
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: unstartedIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [unstartedIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", unstartedIssue]]),
+      linkedLinearIssues: new Map([["s1", [unstartedIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByText("Todo")).toBeInTheDocument();
@@ -1385,15 +1368,12 @@ describe("LinearIssueSection", () => {
 
   it("renders backlog state pill", () => {
     const backlogIssue = { ...mockLinearIssue, stateType: "backlog", stateName: "Backlog" };
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: backlogIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [backlogIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", backlogIssue]]),
+      linkedLinearIssues: new Map([["s1", [backlogIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     expect(screen.getByText("Backlog")).toBeInTheDocument();
@@ -1401,15 +1381,12 @@ describe("LinearIssueSection", () => {
 
   it("links to the issue URL", () => {
     // The issue identifier should be a link to the Linear issue URL
-    mockApi.getLinkedLinearIssue.mockResolvedValue({
-      issue: mockLinearIssue,
-      comments: [],
-      assignee: null,
-      labels: [],
+    mockApi.getLinkedLinearIssues.mockResolvedValue({
+      issues: [mockLinearIssue],
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
-      linkedLinearIssues: new Map([["s1", mockLinearIssue]]),
+      linkedLinearIssues: new Map([["s1", [mockLinearIssue]]]),
     });
     render(<TaskPanel sessionId="s1" />);
     const link = screen.getByText("ENG-123").closest("a");

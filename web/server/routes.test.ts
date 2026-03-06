@@ -106,11 +106,12 @@ vi.mock("./settings-manager.js", () => ({
   })),
 }));
 
-const mockGetLinearIssue = vi.hoisted(() => vi.fn(() => undefined as any));
+const mockGetLinearIssues = vi.hoisted(() => vi.fn(() => [] as any[]));
 vi.mock("./session-linear-issues.js", () => ({
-  getLinearIssue: mockGetLinearIssue,
-  setLinearIssue: vi.fn(),
+  getLinearIssues: mockGetLinearIssues,
+  addLinearIssue: vi.fn(),
   removeLinearIssue: vi.fn(),
+  removeAllLinearIssues: vi.fn(),
   getAllLinearIssues: vi.fn(() => ({})),
   _resetForTest: vi.fn(),
 }));
@@ -1415,7 +1416,7 @@ describe("GET /api/sessions/:id/processes/system", () => {
       .mockReturnValueOnce(
         [
           "COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME",
-          "bun     43210 test   20u  IPv4 0x123456789      0t0  TCP *:3457 (LISTEN)",
+          "bun     43210 test   20u  IPv4 0x123456789      0t0  TCP *:4568 (LISTEN)",
         ].join("\n"),
       )
       .mockReturnValueOnce("bun run dev\n")
@@ -1433,7 +1434,7 @@ describe("GET /api/sessions/:id/processes/system", () => {
       command: "bun",
       fullCommand: "bun run dev",
       cwd: "/Users/test/project",
-      ports: [3457],
+      ports: [4568],
     });
     expect(typeof json.processes[0].startedAt).toBe("number");
   });
@@ -1536,7 +1537,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
   };
 
   it("archives without transition when no linked issue", async () => {
-    mockGetLinearIssue.mockReturnValue(undefined);
+    mockGetLinearIssues.mockReturnValue([]);
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1545,12 +1546,12 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    expect(json.linearTransition).toBeUndefined();
+    expect(json.linearTransitions).toBeUndefined();
     expect(mockTransitionLinearIssue).not.toHaveBeenCalled();
   });
 
   it("archives without transition when linearTransition is none", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    mockGetLinearIssues.mockReturnValue([linkedIssue]);
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1561,7 +1562,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
   });
 
   it("transitions to backlog when linearTransition is backlog", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    mockGetLinearIssues.mockReturnValue([linkedIssue]);
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
@@ -1591,14 +1592,14 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     // Should have resolved backlog state from team states
     expect(mockFetchLinearTeamStates).toHaveBeenCalledWith("lin_test_key");
     expect(mockTransitionLinearIssue).toHaveBeenCalledWith("issue-1", "state-backlog", "lin_test_key");
-    expect(json.linearTransition).toBeDefined();
-    expect(json.linearTransition.ok).toBe(true);
+    expect(json.linearTransitions).toBeDefined();
+    expect(json.linearTransitions[0].ok).toBe(true);
     // Session should still be archived
     expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
   });
 
   it("transitions to configured state when linearTransition is configured", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    mockGetLinearIssues.mockReturnValue([linkedIssue]);
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
@@ -1627,7 +1628,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
   });
 
   it("archives successfully even when transition fails", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    mockGetLinearIssues.mockReturnValue([linkedIssue]);
     mockTransitionLinearIssue.mockResolvedValue({ ok: false, error: "Linear API error" });
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
@@ -1655,7 +1656,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    expect(json.linearTransition.ok).toBe(false);
+    expect(json.linearTransitions[0].ok).toBe(false);
     // Session is still archived
     expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
   });
@@ -1663,15 +1664,15 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
 
 describe("GET /api/sessions/:id/archive-info", () => {
   it("returns no linked issue when session has none", async () => {
-    mockGetLinearIssue.mockReturnValue(undefined);
+    mockGetLinearIssues.mockReturnValue([]);
     const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({ hasLinkedIssue: false, issueNotDone: false });
+    expect(json).toEqual({ hasLinkedIssues: false, issueNotDone: false });
   });
 
   it("returns issueNotDone false for completed issues", async () => {
-    mockGetLinearIssue.mockReturnValue({
+    mockGetLinearIssues.mockReturnValue([{
       id: "issue-1",
       identifier: "ENG-42",
       title: "Done issue",
@@ -1684,16 +1685,16 @@ describe("GET /api/sessions/:id/archive-info", () => {
       teamName: "Engineering",
       teamKey: "ENG",
       teamId: "team-1",
-    });
+    }]);
     const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.hasLinkedIssue).toBe(true);
+    expect(json.hasLinkedIssues).toBe(true);
     expect(json.issueNotDone).toBe(false);
   });
 
   it("returns transition options for non-done issues", async () => {
-    mockGetLinearIssue.mockReturnValue({
+    mockGetLinearIssues.mockReturnValue([{
       id: "issue-1",
       identifier: "ENG-42",
       title: "In progress issue",
@@ -1706,7 +1707,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       teamName: "Engineering",
       teamKey: "ENG",
       teamId: "team-1",
-    });
+    }]);
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
@@ -1728,12 +1729,12 @@ describe("GET /api/sessions/:id/archive-info", () => {
     const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.hasLinkedIssue).toBe(true);
+    expect(json.hasLinkedIssues).toBe(true);
     expect(json.issueNotDone).toBe(true);
     expect(json.hasBacklogState).toBe(true);
     expect(json.archiveTransitionConfigured).toBe(true);
     expect(json.archiveTransitionStateName).toBe("Review");
-    expect(json.issue.identifier).toBe("ENG-42");
+    expect(json.issues[0].identifier).toBe("ENG-42");
   });
 });
 

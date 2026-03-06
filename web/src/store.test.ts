@@ -1057,14 +1057,34 @@ describe("Linear issues", () => {
     teamId: "team-1",
   };
 
-  it("setLinkedLinearIssue: stores issue for a session", () => {
-    useStore.getState().setLinkedLinearIssue("s1", mockIssue);
-    expect(useStore.getState().linkedLinearIssues.get("s1")).toEqual(mockIssue);
+  it("setLinkedLinearIssues: stores issues array for a session", () => {
+    useStore.getState().setLinkedLinearIssues("s1", [mockIssue]);
+    expect(useStore.getState().linkedLinearIssues.get("s1")).toEqual([mockIssue]);
   });
 
-  it("setLinkedLinearIssue(null): removes the issue for a session", () => {
-    useStore.getState().setLinkedLinearIssue("s1", mockIssue);
-    useStore.getState().setLinkedLinearIssue("s1", null);
+  it("setLinkedLinearIssues([]): removes the entry for a session", () => {
+    useStore.getState().setLinkedLinearIssues("s1", [mockIssue]);
+    useStore.getState().setLinkedLinearIssues("s1", []);
+    expect(useStore.getState().linkedLinearIssues.has("s1")).toBe(false);
+  });
+
+  it("addLinkedLinearIssue: appends issue to session", () => {
+    useStore.getState().addLinkedLinearIssue("s1", mockIssue);
+    expect(useStore.getState().linkedLinearIssues.get("s1")).toEqual([mockIssue]);
+  });
+
+  it("addLinkedLinearIssue: deduplicates by id", () => {
+    useStore.getState().addLinkedLinearIssue("s1", mockIssue);
+    const updated = { ...mockIssue, title: "Updated" };
+    useStore.getState().addLinkedLinearIssue("s1", updated);
+    const issues = useStore.getState().linkedLinearIssues.get("s1")!;
+    expect(issues).toHaveLength(1);
+    expect(issues[0].title).toBe("Updated");
+  });
+
+  it("removeLinkedLinearIssue: removes one issue by id", () => {
+    useStore.getState().addLinkedLinearIssue("s1", mockIssue);
+    useStore.getState().removeLinkedLinearIssue("s1", mockIssue.id);
     expect(useStore.getState().linkedLinearIssues.has("s1")).toBe(false);
   });
 });
@@ -1465,7 +1485,7 @@ describe("removeSession: comprehensive cleanup", () => {
     // Set up a session with data in every possible map
     useStore.getState().addSession(makeSession("s1"));
     useStore.getState().setCurrentSession("s1");
-    useStore.getState().setLinkedLinearIssue("s1", {
+    useStore.getState().addLinkedLinearIssue("s1", {
       id: "i1", identifier: "ENG-1", title: "t", description: "d",
       url: "u", branchName: "b", priorityLabel: "p", stateName: "s",
       stateType: "st", teamName: "tm", teamKey: "ENG", teamId: "t1",

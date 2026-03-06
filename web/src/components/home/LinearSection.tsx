@@ -8,8 +8,8 @@ interface LinearSectionProps {
   cwd: string;
   gitRepoInfo: GitRepoInfo | null;
   linearConfigured: boolean;
-  selectedLinearIssue: LinearIssue | null;
-  onIssueSelect: (issue: LinearIssue | null) => void;
+  selectedLinearIssues: LinearIssue[];
+  onIssuesChange: (issues: LinearIssue[]) => void;
   /** Called when a Linear issue selection sets a new branch (for session creation) */
   onBranchFromIssue: (branch: string, isNew: boolean) => void;
 }
@@ -18,8 +18,8 @@ export function LinearSection({
   cwd,
   gitRepoInfo,
   linearConfigured,
-  selectedLinearIssue,
-  onIssueSelect,
+  selectedLinearIssues,
+  onIssuesChange,
   onBranchFromIssue,
 }: LinearSectionProps) {
   // Linear issue search state
@@ -163,17 +163,28 @@ export function LinearSection({
   }, [linearConfigured, searchAllProjects, projectSearchQuery]);
 
   function handleSelectLinearIssue(issue: LinearIssue, closeDropdown = false) {
-    onIssueSelect(issue);
-    setLinearQuery(`${issue.identifier} - ${issue.title}`);
-    const branch = resolveLinearBranch(issue);
-    onBranchFromIssue(branch, true);
+    // Add issue if not already selected, or remove if already selected (toggle)
+    const alreadySelected = selectedLinearIssues.some((i) => i.id === issue.id);
+    if (alreadySelected) {
+      const updated = selectedLinearIssues.filter((i) => i.id !== issue.id);
+      onIssuesChange(updated);
+    } else {
+      const updated = [...selectedLinearIssues, issue];
+      onIssuesChange(updated);
+      // First issue sets the branch
+      if (selectedLinearIssues.length === 0) {
+        const branch = resolveLinearBranch(issue);
+        onBranchFromIssue(branch, true);
+      }
+    }
+    setLinearQuery("");
     if (closeDropdown) {
       setShowLinearDropdown(false);
     }
   }
 
-  function handleClearIssue() {
-    onIssueSelect(null);
+  function handleClearAllIssues() {
+    onIssuesChange([]);
     setLinearQuery("");
     setLinearIssues([]);
     setLinearSearchError("");
@@ -209,7 +220,7 @@ export function LinearSection({
     }
     setLinearMapping(null);
     setRecentIssues([]);
-    onIssueSelect(null);
+    onIssuesChange([]);
     setLinearQuery("");
   }
 
@@ -230,6 +241,7 @@ export function LinearSection({
 
   function handleIssueCreated(issue: LinearIssue) {
     setShowCreateIssueModal(false);
+    // Add the created issue to the selection
     handleSelectLinearIssue(issue);
     // Refresh the recent issues list if a project is attached
     if (linearMapping) {
@@ -291,7 +303,7 @@ export function LinearSection({
                   setShowLinearDropdown(!showLinearDropdown);
                 }}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
-                  selectedLinearIssue
+                  selectedLinearIssues.length > 0
                     ? "border-cc-primary/35 bg-cc-primary/10 text-cc-primary"
                     : linearConfigured
                       ? "border-cc-border bg-cc-hover/70 text-cc-fg hover:bg-cc-hover"
@@ -351,25 +363,24 @@ export function LinearSection({
 
           return (
             <div className="mt-2">
-              {/* Selected issue badge */}
-              {selectedLinearIssue && (
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex-1 min-w-0 text-xs text-cc-primary truncate">
-                    <span className="font-mono-code">{selectedLinearIssue.identifier}</span> - {selectedLinearIssue.title}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onIssueSelect(null);
-                      setLinearQuery("");
-                    }}
-                    className="text-cc-muted hover:text-cc-fg transition-colors cursor-pointer shrink-0"
-                    title="Remove issue"
-                  >
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                      <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z" />
-                    </svg>
-                  </button>
+              {/* Selected issues badges */}
+              {selectedLinearIssues.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {selectedLinearIssues.map((issue) => (
+                    <div key={issue.id} className="inline-flex items-center gap-1.5 text-xs text-cc-primary bg-cc-primary/10 border border-cc-primary/30 rounded-md px-2 py-1">
+                      <span className="font-mono-code">{issue.identifier}</span>
+                      <button
+                        type="button"
+                        onClick={() => onIssuesChange(selectedLinearIssues.filter((i) => i.id !== issue.id))}
+                        className="text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+                        title={`Remove ${issue.identifier}`}
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                          <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -403,7 +414,7 @@ export function LinearSection({
                       type="button"
                       onClick={() => handleSelectLinearIssue(issue)}
                       className={`w-full px-2 py-1.5 text-left rounded-md transition-colors cursor-pointer ${
-                        selectedLinearIssue?.id === issue.id
+                        selectedLinearIssues.some((i) => i.id === issue.id)
                           ? "bg-cc-primary/10 border border-cc-primary/30"
                           : "hover:bg-cc-hover"
                       }`}

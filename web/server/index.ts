@@ -311,7 +311,7 @@ console.log(`  CLI WebSocket:     ws://${hostname}:${server.port}/ws/cli/:sessio
 console.log(`  Browser WebSocket: ws://${hostname}:${server.port}/ws/browser/:sessionId`);
 
 if (process.env.NODE_ENV !== "production") {
-  console.log("Dev mode: frontend at http://localhost:5174");
+  console.log("Dev mode: frontend at http://localhost:4545");
 }
 
 // ── Cron scheduler ──────────────────────────────────────────────────────────

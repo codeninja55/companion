@@ -412,15 +412,15 @@ export interface AppSettings {
 }
 
 export interface ArchiveInfo {
-  hasLinkedIssue: boolean;
+  hasLinkedIssues: boolean;
   issueNotDone: boolean;
-  issue?: {
+  issues?: {
     id: string;
     identifier: string;
     stateName: string;
     stateType: string;
     teamId: string;
-  };
+  }[];
   hasBacklogState?: boolean;
   archiveTransitionConfigured?: boolean;
   archiveTransitionStateName?: string;
@@ -478,6 +478,11 @@ export interface LinearIssueDetail {
   comments?: LinearComment[];
   assignee?: { name: string; avatarUrl?: string | null } | null;
   labels?: { id: string; name: string; color: string }[];
+}
+
+export interface LinkedLinearIssuesResponse {
+  issues: LinearIssue[];
+  details?: LinearIssueDetail[];
 }
 
 export interface LinearProject {
@@ -966,14 +971,16 @@ export const api = {
   removeLinearProjectMapping: (repoRoot: string) =>
     del<{ ok: boolean }>("/linear/project-mappings", { repoRoot }),
 
-  // Linear issue <-> session association
-  linkLinearIssue: (sessionId: string, issue: LinearIssue) =>
-    put<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`, issue),
-  unlinkLinearIssue: (sessionId: string) =>
-    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`),
-  getLinkedLinearIssue: (sessionId: string, refresh = false) =>
-    get<LinearIssueDetail>(
-      `/sessions/${encodeURIComponent(sessionId)}/linear-issue${refresh ? "?refresh=true" : ""}`,
+  // Linear issues <-> session association (plural)
+  addLinearIssue: (sessionId: string, issue: LinearIssue) =>
+    post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issues`, issue),
+  removeLinearIssue: (sessionId: string, issueId: string) =>
+    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issues`, { issueId }),
+  removeAllLinearIssues: (sessionId: string) =>
+    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issues`),
+  getLinkedLinearIssues: (sessionId: string, refresh = false) =>
+    get<LinkedLinearIssuesResponse>(
+      `/sessions/${encodeURIComponent(sessionId)}/linear-issues${refresh ? "?refresh=true" : ""}`,
     ),
   createLinearIssue: (input: CreateLinearIssueInput) =>
     post<{ ok: boolean; issue: LinearIssue }>("/linear/issues", input),

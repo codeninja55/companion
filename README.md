@@ -22,7 +22,7 @@
 bunx the-companion
 ```
 
-Open [http://localhost:3456](http://localhost:3456).
+Open [http://localhost:4567](http://localhost:4567).
 
 ### Install globally
 
@@ -36,7 +36,7 @@ the-companion install
 the-companion start
 ```
 
-Open [http://localhost:3456](http://localhost:3456). The server runs in the background and survives reboots.
+Open [http://localhost:4567](http://localhost:4567). The server runs in the background and survives reboots.
 
 ## CLI commands
 
@@ -52,7 +52,7 @@ Open [http://localhost:3456](http://localhost:3456). The server runs in the back
 | `the-companion status` | Show service status |
 | `the-companion logs` | Tail service log files |
 
-**Options:** `--port <n>` overrides the default port (3456).
+**Options:** `--port <n>` overrides the default port (4567).
 
 ## Why this is useful
 - **Parallel sessions**: work on multiple tasks without juggling terminals.
@@ -72,9 +72,9 @@ Open [http://localhost:3456](http://localhost:3456). The server runs in the back
 ## Architecture (simple)
 ```text
 Browser (React)
-  <-> ws://localhost:3456/ws/browser/:session
+  <-> ws://localhost:4567/ws/browser/:session
 Companion server (Bun + Hono)
-  <-> ws://localhost:3456/ws/cli/:session
+  <-> ws://localhost:4567/ws/cli/:session
 Claude Code / Codex CLI
 ```
 

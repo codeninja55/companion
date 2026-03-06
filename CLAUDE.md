@@ -10,7 +10,7 @@ It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Clau
 ## Development Commands
 
 ```bash
-# Dev server (Hono backend on :3456 + Vite HMR on :5174)
+# Dev server (Hono backend on :4568 + Vite HMR on :4545)
 cd web && bun install && bun run dev
 
 # Or from repo root (requires mise — see .mise.toml)
@@ -59,7 +59,7 @@ All UI components used in the message/chat flow **must** be represented in the P
 
 ```
 Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket ←→ CLI
-     :5174        /ws/browser/:id      :3456       /ws/cli/:id    (--sdk-url)
+     :4545        /ws/browser/:id      :4567       /ws/cli/:id    (--sdk-url)
                   /ws/terminal/:id                                 PTY sessions
 ```
 
@@ -76,7 +76,7 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket ←�
 
 ### All code lives under `web/`
 
-- **`web/server/`** — Hono + Bun backend (runs on port 3456). Key
+- **`web/server/`** — Hono + Bun backend (runs on port 4567). Key
   subsystems:
   - **Core:** `index.ts` (bootstrap, Bun.serve, WebSocket upgrade
     routing), `constants.ts`, `service.ts` (launchd/systemd),

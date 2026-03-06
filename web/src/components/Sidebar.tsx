@@ -287,12 +287,14 @@ export function Sidebar() {
     const bridgeState = sessions.get(sessionId);
     const isContainerized = bridgeState?.is_containerized || !!sdkInfo?.containerId || false;
 
-    // Check if session has a linked non-done Linear issue
-    const linkedIssue = linkedLinearIssues.get(sessionId);
-    const stateType = (linkedIssue?.stateType || "").toLowerCase();
-    const isIssueDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled";
+    // Check if session has any linked non-done Linear issues
+    const linkedIssues = linkedLinearIssues.get(sessionId) ?? [];
+    const hasNonDoneIssue = linkedIssues.some((issue) => {
+      const st = (issue.stateType || "").toLowerCase();
+      return st !== "completed" && st !== "canceled" && st !== "cancelled";
+    });
 
-    if (linkedIssue && !isIssueDone) {
+    if (hasNonDoneIssue) {
       // Fetch archive info (backlog availability, configured transition state)
       try {
         const info = await api.getArchiveInfo(sessionId);
@@ -775,8 +777,7 @@ export function Sidebar() {
       {/* Archive Linear transition modal */}
       {archiveModalSessionId && archiveModalInfo && (
         <ArchiveLinearModal
-          issueIdentifier={archiveModalInfo.issue?.identifier || ""}
-          issueStateName={archiveModalInfo.issue?.stateName || ""}
+          issues={(archiveModalInfo.issues ?? []).map((i) => ({ identifier: i.identifier, stateName: i.stateName }))}
           isContainerized={archiveModalContainerized}
           archiveTransitionConfigured={archiveModalInfo.archiveTransitionConfigured || false}
           archiveTransitionStateName={archiveModalInfo.archiveTransitionStateName}

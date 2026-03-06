@@ -3,6 +3,7 @@ import { setCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
+import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD } from "./constants.js";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -98,7 +99,7 @@ export function createRoutes(
       return c.json({ error: "unauthorized" }, 401);
     }
 
-    const port = Number(process.env.PORT) || (process.env.NODE_ENV === "production" ? 3456 : 3457);
+    const port = Number(process.env.PORT) || (process.env.NODE_ENV === "production" ? DEFAULT_PORT_PROD : DEFAULT_PORT_DEV);
     const authToken = getToken();
 
     // Build QR codes for each remote address (skip localhost — it auto-auths).
@@ -1499,7 +1500,7 @@ export function createRoutes(
 
     const worktreeResult = cleanupWorktree(id, true);
     prPoller?.unwatch(id);
-    sessionLinearIssues.removeLinearIssue(id);
+    sessionLinearIssues.removeAllLinearIssues(id);
     launcher.removeSession(id);
     wsBridge.closeSession(id);
     return c.json({ ok: true, worktree: worktreeResult });
@@ -1507,51 +1508,55 @@ export function createRoutes(
 
   api.get("/sessions/:id/archive-info", async (c) => {
     const id = c.req.param("id");
-    const linkedIssue = sessionLinearIssues.getLinearIssue(id);
+    const linkedIssues = sessionLinearIssues.getLinearIssues(id);
 
-    if (!linkedIssue) {
-      return c.json({ hasLinkedIssue: false, issueNotDone: false });
+    if (linkedIssues.length === 0) {
+      return c.json({ hasLinkedIssues: false, issueNotDone: false });
     }
 
-    const stateType = (linkedIssue.stateType || "").toLowerCase();
-    const isDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled";
+    const isDoneFn = (issue: { stateType?: string }) => {
+      const st = (issue.stateType || "").toLowerCase();
+      return st === "completed" || st === "canceled" || st === "cancelled";
+    };
+    const allDone = linkedIssues.every(isDoneFn);
+    const issues = linkedIssues.map((i) => ({
+      id: i.id,
+      identifier: i.identifier,
+      stateName: i.stateName,
+      stateType: i.stateType,
+      teamId: i.teamId,
+    }));
 
-    if (isDone) {
+    if (allDone) {
       return c.json({
-        hasLinkedIssue: true,
+        hasLinkedIssues: true,
         issueNotDone: false,
-        issue: {
-          id: linkedIssue.id,
-          identifier: linkedIssue.identifier,
-          stateName: linkedIssue.stateName,
-          stateType: linkedIssue.stateType,
-          teamId: linkedIssue.teamId,
-        },
+        issues,
       });
     }
 
-    // Issue is not done — check if backlog state is available and if archive transition is configured
+    // At least one issue is not done — check if backlog state is available
     const settings = getSettings();
     const linearApiKey = settings.linearApiKey.trim();
     let hasBacklogState = false;
-    if (linearApiKey && linkedIssue.teamId) {
-      const teams = await fetchLinearTeamStates(linearApiKey);
-      const team = teams.find((t) => t.id === linkedIssue.teamId);
-      if (team) {
-        hasBacklogState = team.states.some((s) => s.type === "backlog");
+    if (linearApiKey) {
+      const teamIds = new Set(linkedIssues.map((i) => i.teamId).filter(Boolean));
+      if (teamIds.size > 0) {
+        const teams = await fetchLinearTeamStates(linearApiKey);
+        for (const tid of teamIds) {
+          const team = teams.find((t) => t.id === tid);
+          if (team?.states.some((s) => s.type === "backlog")) {
+            hasBacklogState = true;
+            break;
+          }
+        }
       }
     }
 
     return c.json({
-      hasLinkedIssue: true,
+      hasLinkedIssues: true,
       issueNotDone: true,
-      issue: {
-        id: linkedIssue.id,
-        identifier: linkedIssue.identifier,
-        stateName: linkedIssue.stateName,
-        stateType: linkedIssue.stateType,
-        teamId: linkedIssue.teamId,
-      },
+      issues,
       hasBacklogState,
       archiveTransitionConfigured: settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim(),
       archiveTransitionStateName: settings.linearArchiveTransitionStateName || undefined,
@@ -1563,37 +1568,45 @@ export function createRoutes(
     const body = await c.req.json().catch(() => ({}));
 
     // ─── Best-effort Linear transition before archive ─────────────────
-    let linearTransitionResult: { ok: boolean; skipped?: boolean; error?: string; issue?: { id: string; identifier: string; stateName: string; stateType: string } } | undefined;
+    type TransitionResult = { ok: boolean; skipped?: boolean; error?: string; issue?: { id: string; identifier: string; stateName: string; stateType: string } };
+    let linearTransitionResults: TransitionResult[] | undefined;
     const linearTransition = body.linearTransition as string | undefined;
 
     if (linearTransition && linearTransition !== "none") {
-      const linkedIssue = sessionLinearIssues.getLinearIssue(id);
-      if (linkedIssue) {
+      const linkedIssues = sessionLinearIssues.getLinearIssues(id);
+      if (linkedIssues.length > 0) {
         const settings = getSettings();
         const linearApiKey = settings.linearApiKey.trim();
         if (linearApiKey) {
-          let targetStateId = "";
-
-          if (linearTransition === "backlog" && linkedIssue.teamId) {
-            // Resolve backlog state for the issue's team
-            const teams = await fetchLinearTeamStates(linearApiKey);
-            const team = teams.find((t) => t.id === linkedIssue.teamId);
-            const backlogState = team?.states.find((s) => s.type === "backlog");
-            if (backlogState) {
-              targetStateId = backlogState.id;
-            }
-          } else if (linearTransition === "configured") {
-            targetStateId = settings.linearArchiveTransitionStateId.trim();
+          linearTransitionResults = [];
+          // Pre-fetch team states once for backlog resolution
+          let teams: Awaited<ReturnType<typeof fetchLinearTeamStates>> | null = null;
+          if (linearTransition === "backlog") {
+            teams = await fetchLinearTeamStates(linearApiKey);
           }
 
-          if (targetStateId) {
-            try {
-              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey);
-            } catch {
-              linearTransitionResult = { ok: false, error: "Transition failed unexpectedly" };
+          for (const issue of linkedIssues) {
+            let targetStateId = "";
+
+            if (linearTransition === "backlog" && issue.teamId && teams) {
+              const team = teams.find((t) => t.id === issue.teamId);
+              const backlogState = team?.states.find((s) => s.type === "backlog");
+              if (backlogState) {
+                targetStateId = backlogState.id;
+              }
+            } else if (linearTransition === "configured") {
+              targetStateId = settings.linearArchiveTransitionStateId.trim();
             }
-          } else {
-            linearTransitionResult = { ok: true, skipped: true };
+
+            if (targetStateId) {
+              try {
+                linearTransitionResults.push(await transitionLinearIssue(issue.id, targetStateId, linearApiKey));
+              } catch {
+                linearTransitionResults.push({ ok: false, error: "Transition failed unexpectedly" });
+              }
+            } else {
+              linearTransitionResults.push({ ok: true, skipped: true });
+            }
           }
         }
       }
@@ -1611,7 +1624,7 @@ export function createRoutes(
     const worktreeResult = cleanupWorktree(id, body.force);
     launcher.setArchived(id, true);
     sessionStore.setArchived(id, true);
-    return c.json({ ok: true, worktree: worktreeResult, linearTransition: linearTransitionResult });
+    return c.json({ ok: true, worktree: worktreeResult, linearTransitions: linearTransitionResults });
   });
 
   api.post("/sessions/:id/unarchive", (c) => {

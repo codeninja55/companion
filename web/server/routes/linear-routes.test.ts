@@ -29,9 +29,10 @@ vi.mock("../linear-cache.js", () => ({
 
 // ─── Mock session-linear-issues ─────────────────────────────────────────────
 vi.mock("../session-linear-issues.js", () => ({
-  getLinearIssue: vi.fn(() => undefined),
-  setLinearIssue: vi.fn(),
+  getLinearIssues: vi.fn(() => []),
+  addLinearIssue: vi.fn(),
   removeLinearIssue: vi.fn(),
+  removeAllLinearIssues: vi.fn(),
 }));
 
 // ─── Mock linear-project-manager ────────────────────────────────────────────
@@ -322,13 +323,13 @@ describe("GET /api/linear/connection", () => {
 });
 
 // =============================================================================
-// PUT /api/sessions/:id/linear-issue
+// POST /api/sessions/:id/linear-issues
 // =============================================================================
 
-describe("PUT /api/sessions/:id/linear-issue", () => {
+describe("POST /api/sessions/:id/linear-issues", () => {
   it("returns 400 when required fields are missing (covers line 172-173)", async () => {
-    const res = await app.request("/api/sessions/sess-1/linear-issue", {
-      method: "PUT",
+    const res = await app.request("/api/sessions/sess-1/linear-issues", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: "issue-1" }), // missing identifier, title, url
     });
@@ -355,15 +356,15 @@ describe("PUT /api/sessions/:id/linear-issue", () => {
       updatedAt: "2025-01-01T00:00:00Z",
     };
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue", {
-      method: "PUT",
+    const res = await app.request("/api/sessions/sess-1/linear-issues", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(issueBody),
     });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(sessionLinearIssues.setLinearIssue).toHaveBeenCalledWith(
+    expect(sessionLinearIssues.addLinearIssue).toHaveBeenCalledWith(
       "sess-1",
       expect.objectContaining({
         id: "issue-1",
@@ -384,14 +385,14 @@ describe("PUT /api/sessions/:id/linear-issue", () => {
       // No optional fields: description, branchName, etc.
     };
 
-    const res = await app.request("/api/sessions/sess-2/linear-issue", {
-      method: "PUT",
+    const res = await app.request("/api/sessions/sess-2/linear-issues", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(issueBody),
     });
 
     expect(res.status).toBe(200);
-    expect(sessionLinearIssues.setLinearIssue).toHaveBeenCalledWith(
+    expect(sessionLinearIssues.addLinearIssue).toHaveBeenCalledWith(
       "sess-2",
       expect.objectContaining({
         description: "",
@@ -404,8 +405,8 @@ describe("PUT /api/sessions/:id/linear-issue", () => {
   });
 
   it("handles malformed JSON body gracefully", async () => {
-    const res = await app.request("/api/sessions/sess-1/linear-issue", {
-      method: "PUT",
+    const res = await app.request("/api/sessions/sess-1/linear-issues", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "not-json",
     });
@@ -415,19 +416,19 @@ describe("PUT /api/sessions/:id/linear-issue", () => {
 });
 
 // =============================================================================
-// GET /api/sessions/:id/linear-issue
+// GET /api/sessions/:id/linear-issues
 // =============================================================================
 
-describe("GET /api/sessions/:id/linear-issue", () => {
-  it("returns null when no issue is stored (covers lines 195-197)", async () => {
-    vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue(undefined);
+describe("GET /api/sessions/:id/linear-issues", () => {
+  it("returns empty array when no issues are stored (covers lines 195-197)", async () => {
+    vi.mocked(sessionLinearIssues.getLinearIssues).mockReturnValue([]);
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue");
+    const res = await app.request("/api/sessions/sess-1/linear-issues");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issue: null });
+    expect(await res.json()).toEqual({ issues: [] });
   });
 
-  it("returns stored issue without refresh by default (covers lines 199-200)", async () => {
+  it("returns stored issues without refresh by default (covers lines 199-200)", async () => {
     const stored = {
       id: "issue-1",
       identifier: "COMP-1",
@@ -442,15 +443,15 @@ describe("GET /api/sessions/:id/linear-issue", () => {
       teamKey: "COMP",
       teamId: "team-1",
     };
-    vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue(stored);
+    vi.mocked(sessionLinearIssues.getLinearIssues).mockReturnValue([stored]);
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue");
+    const res = await app.request("/api/sessions/sess-1/linear-issues");
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.issue).toEqual(stored);
+    expect(json.issues).toEqual([stored]);
   });
 
-  it("returns stored issue when refresh=true but no API key (covers line 205)", async () => {
+  it("returns stored issues when refresh=true but no API key (covers line 205)", async () => {
     const stored = {
       id: "issue-1",
       identifier: "COMP-1",
@@ -465,16 +466,16 @@ describe("GET /api/sessions/:id/linear-issue", () => {
       teamKey: "COMP",
       teamId: "team-1",
     };
-    vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue(stored);
+    vi.mocked(sessionLinearIssues.getLinearIssues).mockReturnValue([stored]);
     mockSettings.linearApiKey = "";
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue?refresh=true");
+    const res = await app.request("/api/sessions/sess-1/linear-issues?refresh=true");
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.issue).toEqual(stored);
+    expect(json.issues).toEqual([stored]);
   });
 
-  it("refreshes from Linear API and returns updated data with comments/labels (covers refresh path)", async () => {
+  it("refreshes from Linear API and returns updated data with details (covers refresh path)", async () => {
     const stored = {
       id: "issue-1",
       identifier: "COMP-1",
@@ -489,7 +490,7 @@ describe("GET /api/sessions/:id/linear-issue", () => {
       teamKey: "COMP",
       teamId: "team-1",
     };
-    vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue(stored);
+    vi.mocked(sessionLinearIssues.getLinearIssues).mockReturnValue([stored]);
 
     mockFetch().mockResolvedValue(
       linearOk({
@@ -519,32 +520,34 @@ describe("GET /api/sessions/:id/linear-issue", () => {
       }),
     );
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue?refresh=true");
+    const res = await app.request("/api/sessions/sess-1/linear-issues?refresh=true");
     expect(res.status).toBe(200);
     const json = await res.json();
 
-    // Updated issue fields
-    expect(json.issue.title).toBe("Updated title");
-    expect(json.issue.description).toBe("Updated desc");
-    expect(json.issue.stateName).toBe("In Progress");
-    expect(json.issue.assigneeName).toBe("Jane Doe");
+    // Updated issue fields in the issues array
+    expect(json.issues).toHaveLength(1);
+    expect(json.issues[0].title).toBe("Updated title");
+    expect(json.issues[0].description).toBe("Updated desc");
+    expect(json.issues[0].stateName).toBe("In Progress");
+    expect(json.issues[0].assigneeName).toBe("Jane Doe");
 
-    // Comments
-    expect(json.comments).toHaveLength(1);
-    expect(json.comments[0].body).toBe("A comment");
-    expect(json.comments[0].userName).toBe("Johnny");
-    expect(json.comments[0].userAvatarUrl).toBe("https://avatar.url");
+    // Details array with comments, assignee, labels
+    expect(json.details).toHaveLength(1);
+    expect(json.details[0].comments).toHaveLength(1);
+    expect(json.details[0].comments[0].body).toBe("A comment");
+    expect(json.details[0].comments[0].userName).toBe("Johnny");
+    expect(json.details[0].comments[0].userAvatarUrl).toBe("https://avatar.url");
 
-    // Assignee
-    expect(json.assignee.name).toBe("Jane Doe");
-    expect(json.assignee.avatarUrl).toBe("https://jane.url");
+    // Assignee in details
+    expect(json.details[0].assignee.name).toBe("Jane Doe");
+    expect(json.details[0].assignee.avatarUrl).toBe("https://jane.url");
 
-    // Labels
-    expect(json.labels).toHaveLength(1);
-    expect(json.labels[0].name).toBe("Bug");
+    // Labels in details
+    expect(json.details[0].labels).toHaveLength(1);
+    expect(json.details[0].labels[0].name).toBe("Bug");
 
-    // setLinearIssue should have been called with updated data
-    expect(sessionLinearIssues.setLinearIssue).toHaveBeenCalledWith(
+    // addLinearIssue should have been called with updated data
+    expect(sessionLinearIssues.addLinearIssue).toHaveBeenCalledWith(
       "sess-1",
       expect.objectContaining({ title: "Updated title" }),
     );
@@ -565,15 +568,17 @@ describe("GET /api/sessions/:id/linear-issue", () => {
       teamKey: "COMP",
       teamId: "team-1",
     };
-    vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue(stored);
+    vi.mocked(sessionLinearIssues.getLinearIssues).mockReturnValue([stored]);
 
     // Make the cache's getOrFetch throw so we exercise the catch block
     vi.mocked(linearCache.getOrFetch).mockRejectedValueOnce(new Error("Network error"));
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue?refresh=true");
+    const res = await app.request("/api/sessions/sess-1/linear-issues?refresh=true");
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.issue).toEqual(stored);
+    // Falls back to stored issues array, wrapped in details
+    expect(json.issues).toHaveLength(1);
+    expect(json.issues[0]).toEqual(stored);
   });
 
   it("falls back to stored issue when Linear returns null issue", async () => {
@@ -591,32 +596,46 @@ describe("GET /api/sessions/:id/linear-issue", () => {
       teamKey: "COMP",
       teamId: "team-1",
     };
-    vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue(stored);
+    vi.mocked(sessionLinearIssues.getLinearIssues).mockReturnValue([stored]);
 
     mockFetch().mockResolvedValue(
       linearOk({ issue: null }),
     );
 
-    const res = await app.request("/api/sessions/sess-1/linear-issue?refresh=true");
+    const res = await app.request("/api/sessions/sess-1/linear-issues?refresh=true");
     expect(res.status).toBe(200);
     const json = await res.json();
     // Falls through to stored data since result is null
-    expect(json.issue).toEqual(stored);
+    expect(json.issues).toHaveLength(1);
+    expect(json.issues[0]).toEqual(stored);
   });
 });
 
 // =============================================================================
-// DELETE /api/sessions/:id/linear-issue
+// DELETE /api/sessions/:id/linear-issues
 // =============================================================================
 
-describe("DELETE /api/sessions/:id/linear-issue", () => {
-  it("removes the issue and returns ok (covers lines 311-315)", async () => {
-    const res = await app.request("/api/sessions/sess-1/linear-issue", {
+describe("DELETE /api/sessions/:id/linear-issues", () => {
+  it("removes a single issue when issueId is provided", async () => {
+    const res = await app.request("/api/sessions/sess-1/linear-issues", {
       method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ issueId: "issue-42" }),
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(sessionLinearIssues.removeLinearIssue).toHaveBeenCalledWith("sess-1");
+    expect(sessionLinearIssues.removeLinearIssue).toHaveBeenCalledWith("sess-1", "issue-42");
+  });
+
+  it("removes all issues when no issueId is provided (covers lines 311-315)", async () => {
+    const res = await app.request("/api/sessions/sess-1/linear-issues", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sessionLinearIssues.removeAllLinearIssues).toHaveBeenCalledWith("sess-1");
   });
 });
 

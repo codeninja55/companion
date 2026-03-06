@@ -149,7 +149,7 @@ beforeEach(() => {
   process.env.COMPANION_CODEX_TRANSPORT = "stdio";
   tempDir = mkdtempSync(join(tmpdir(), "launcher-test-"));
   store = new SessionStore(tempDir);
-  launcher = new CliLauncher(3456);
+  launcher = new CliLauncher(4567);
   launcher.setStore(store);
   mockSpawn.mockReturnValue(createMockProc());
   mockListen.mockImplementation(() => ({ stop: vi.fn() }));
@@ -185,7 +185,7 @@ describe("launch", () => {
 
     // Core required flags
     expect(cmdAndArgs).toContain("--sdk-url");
-    expect(cmdAndArgs).toContain("ws://localhost:3456/ws/cli/test-session-id");
+    expect(cmdAndArgs).toContain("ws://localhost:4567/ws/cli/test-session-id");
     expect(cmdAndArgs).toContain("--print");
     expect(cmdAndArgs).toContain("--output-format");
     expect(cmdAndArgs).toContain("stream-json");
@@ -249,7 +249,7 @@ describe("launch", () => {
     // With bash -lc wrapping, CLI args are in the last element as a single string
     const bashCmd = cmdAndArgs[cmdAndArgs.length - 1];
     expect(bashCmd).toContain("--sdk-url");
-    expect(bashCmd).toContain("ws://172.17.0.1:3456/ws/cli/test-session-id");
+    expect(bashCmd).toContain("ws://172.17.0.1:4567/ws/cli/test-session-id");
   });
 
   it("passes --allowedTools for each tool", () => {
@@ -1049,7 +1049,7 @@ describe("persistence", () => {
         return origKill.call(process, pid, signal as any);
       }) as any);
 
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       newLauncher.setStore(store);
       const recovered = newLauncher.restoreFromDisk();
 
@@ -1085,7 +1085,7 @@ describe("persistence", () => {
         return true;
       }) as any);
 
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       newLauncher.setStore(store);
       const recovered = newLauncher.restoreFromDisk();
 
@@ -1101,13 +1101,13 @@ describe("persistence", () => {
     });
 
     it("returns 0 when no store is set", () => {
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       // No setStore call
       expect(newLauncher.restoreFromDisk()).toBe(0);
     });
 
     it("returns 0 when store has no launcher data", () => {
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       newLauncher.setStore(store);
       // Store is empty, no launcher.json file
       expect(newLauncher.restoreFromDisk()).toBe(0);
@@ -1132,7 +1132,7 @@ describe("persistence", () => {
 
       mockIsContainerAlive.mockReturnValueOnce("running");
 
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       newLauncher.setStore(store);
       const recovered = newLauncher.restoreFromDisk();
 
@@ -1160,7 +1160,7 @@ describe("persistence", () => {
 
       mockIsContainerAlive.mockReturnValueOnce("stopped");
 
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       newLauncher.setStore(store);
       const recovered = newLauncher.restoreFromDisk();
 
@@ -1186,7 +1186,7 @@ describe("persistence", () => {
       ];
       store.saveLauncher(savedSessions);
 
-      const newLauncher = new CliLauncher(3456);
+      const newLauncher = new CliLauncher(4567);
       newLauncher.setStore(store);
       const recovered = newLauncher.restoreFromDisk();
 
