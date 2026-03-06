@@ -38,7 +38,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const isPlan = currentMode === "plan";
   const isCodex = sessionData?.backend_type === "codex";
   const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
-  const modeLabel = modes.find((m) => m.value === currentMode)?.label?.toLowerCase() || currentMode;
+  const modeLabel = modes.find((m) => m.value === currentMode)?.label || currentMode;
 
   const mention = useMentionMenu({
     text,

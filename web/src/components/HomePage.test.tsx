@@ -409,8 +409,8 @@ describe("HomePage", () => {
     render(<HomePage />);
     await screen.findByPlaceholderText("Fix a bug, build a feature, refactor code...");
 
-    // Default mode for claude backend is "Agent"
-    const modeButton = screen.getByText("Agent");
+    // Default mode for claude backend is "Bypass Permissions"
+    const modeButton = screen.getByText("Bypass Permissions");
     fireEvent.click(modeButton);
 
     // Select Plan mode
@@ -425,29 +425,29 @@ describe("HomePage", () => {
 
   it("cycles permission mode on Shift+Tab", async () => {
     // Shift+Tab should cycle through available modes:
-    // Agent -> Auto-edit -> Supervised -> Plan -> Agent
+    // Bypass Permissions -> Accept Edits -> Default -> Plan -> Bypass Permissions
     render(<HomePage />);
     const textarea = screen.getByPlaceholderText("Fix a bug, build a feature, refactor code...");
     await waitFor(() => expect(textarea).toBeInTheDocument());
 
-    // Default mode is "Agent" (bypassPermissions)
-    expect(screen.getByText("Agent")).toBeInTheDocument();
+    // Default mode is "Bypass Permissions" (bypassPermissions)
+    expect(screen.getByText("Bypass Permissions")).toBeInTheDocument();
 
-    // Press Shift+Tab to cycle to next mode (Auto-edit)
+    // Press Shift+Tab to cycle to next mode (Accept Edits)
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
-    expect(screen.getByText("Auto-edit")).toBeInTheDocument();
+    expect(screen.getByText("Accept Edits")).toBeInTheDocument();
 
-    // Press Shift+Tab to cycle to Supervised
+    // Press Shift+Tab to cycle to Default
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
-    expect(screen.getByText("Supervised")).toBeInTheDocument();
+    expect(screen.getByText("Default")).toBeInTheDocument();
 
     // Press Shift+Tab to cycle to Plan
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
     expect(screen.getByText("Plan")).toBeInTheDocument();
 
-    // Press Shift+Tab again to cycle back to Agent
+    // Press Shift+Tab again to cycle back to Bypass Permissions
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
-    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("Bypass Permissions")).toBeInTheDocument();
   });
 
   it("submits on Enter (without shift) when text is present", async () => {

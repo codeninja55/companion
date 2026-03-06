@@ -258,7 +258,7 @@ describe("Composer sending messages", () => {
 describe("Composer mode selector", () => {
   it("pressing Shift+Tab cycles to next mode", () => {
     // Default session mode is "acceptEdits" (index 1 in CLAUDE_MODES).
-    // Next mode is "default" (Supervised) at index 2.
+    // Next mode is "default" (Default) at index 2.
     const { container } = render(<Composer sessionId="s1" />);
     const textarea = container.querySelector("textarea")!;
 
@@ -276,7 +276,7 @@ describe("Composer mode selector", () => {
     const triggers = screen.getAllByTestId("mode-dropdown-trigger");
     fireEvent.click(triggers[0]);
 
-    // CLAUDE_MODES has "Agent" and "Plan"
+    // CLAUDE_MODES has "Bypass Permissions" and "Plan"
     expect(screen.getAllByTestId("mode-option-bypassPermissions").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByTestId("mode-option-plan").length).toBeGreaterThanOrEqual(1);
   });
