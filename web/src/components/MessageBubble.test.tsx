@@ -84,6 +84,36 @@ describe("MessageBubble - user messages", () => {
     const images = container.querySelectorAll("img");
     expect(images.length).toBe(0);
   });
+
+  it("shows a copy button on user messages", () => {
+    // Validates copy button is present on user message bubbles for clipboard access.
+    const msg = makeMessage({ role: "user", content: "Copy me" });
+    render(<MessageBubble message={msg} />);
+
+    const copyBtn = screen.getByTestId("copy-user-msg");
+    expect(copyBtn).toBeTruthy();
+    expect(copyBtn.getAttribute("title")).toBe("Copy message");
+  });
+
+  it("copy button is NOT present on assistant messages", () => {
+    // Validates copy button only appears on user messages, not assistant messages.
+    const msg = makeMessage({ role: "assistant", content: "I am the assistant" });
+    render(<MessageBubble message={msg} />);
+
+    expect(screen.queryByTestId("copy-user-msg")).toBeNull();
+  });
+
+  it("clicking copy button calls navigator.clipboard.writeText", async () => {
+    // Validates the copy button writes the user message content to the clipboard.
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
+
+    const msg = makeMessage({ role: "user", content: "Clipboard content" });
+    render(<MessageBubble message={msg} />);
+
+    fireEvent.click(screen.getByTestId("copy-user-msg"));
+    expect(writeTextMock).toHaveBeenCalledWith("Clipboard content");
+  });
 });
 
 // ─── Assistant messages ──────────────────────────────────────────────────────
