@@ -55,11 +55,14 @@ export const CODEX_MODELS: ModelOption[] = [
 
 export const CLAUDE_MODES: ModeOption[] = [
   { value: "bypassPermissions", label: "Agent" },
+  { value: "acceptEdits", label: "Auto-edit" },
+  { value: "default", label: "Supervised" },
   { value: "plan", label: "Plan" },
 ];
 
 export const CODEX_MODES: ModeOption[] = [
   { value: "bypassPermissions", label: "Auto" },
+  { value: "default", label: "Supervised" },
   { value: "plan", label: "Plan" },
 ];
 

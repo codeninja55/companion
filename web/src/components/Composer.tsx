@@ -33,8 +33,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const pendingSelectionRef = useRef<number | null>(null);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionData = useStore((s) => s.sessions.get(sessionId));
-  const previousMode = useStore((s) => s.previousPermissionMode.get(sessionId) || "acceptEdits");
-
   const isConnected = cliConnected.get(sessionId) ?? false;
   const currentMode = sessionData?.permissionMode || "acceptEdits";
   const isPlan = currentMode === "plan";
@@ -234,7 +232,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
-      toggleMode();
+      // Cycle to next mode
+      const modeValues = modes.map((m) => m.value);
+      const currentIdx = modeValues.indexOf(currentMode);
+      const nextIdx = (currentIdx + 1) % modeValues.length;
+      handleModeSelect(modeValues[nextIdx]);
       return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
@@ -294,18 +296,32 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }
 
-  function toggleMode() {
-    if (!isConnected) return;
-    const store = useStore.getState();
-    if (!isPlan) {
-      store.setPreviousPermissionMode(sessionId, currentMode);
-      sendToSession(sessionId, { type: "set_permission_mode", mode: "plan" });
-      store.updateSession(sessionId, { permissionMode: "plan" });
-    } else {
-      const restoreMode = previousMode || (isCodex ? "bypassPermissions" : "acceptEdits");
-      sendToSession(sessionId, { type: "set_permission_mode", mode: restoreMode });
-      store.updateSession(sessionId, { permissionMode: restoreMode });
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close mode dropdown on click-outside or Escape
+  useEffect(() => {
+    if (!showModeDropdown) return;
+    function handleClick(e: MouseEvent) {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
+        setShowModeDropdown(false);
+      }
     }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowModeDropdown(false);
+    }
+    document.addEventListener("pointerdown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [showModeDropdown]);
+
+  function handleModeSelect(mode: string) {
+    if (!isConnected || mode === currentMode) return;
+    sendToSession(sessionId, { type: "set_permission_mode", mode });
+    useStore.getState().updateSession(sessionId, { permissionMode: mode });
   }
 
   async function handleCreatePrompt() {
@@ -340,6 +356,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const sessionStatus = useStore((s) => s.sessionStatus);
   const isRunning = sessionStatus.get(sessionId) === "running";
   const canSend = text.trim().length > 0 && isConnected;
+
+  // Share dropdown ref between mobile and desktop via a single rendered instance.
+  // Only one is visible at a time (CSS sm:hidden / hidden sm:flex).
 
   return (
     <div className="shrink-0 px-0 sm:px-6 pt-0 sm:pt-3 pb-5 sm:pb-4 bg-cc-input-bg sm:bg-transparent">
@@ -506,33 +525,19 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          {/* Mobile toolbar: mode toggle + model switcher + secondary actions (hidden on sm+) */}
+          {/* Mobile toolbar: mode selector + model switcher + secondary actions (hidden on sm+) */}
           <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-0.5 sm:hidden">
-            <button
-              onClick={toggleMode}
-              disabled={!isConnected}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
-                !isConnected
-                  ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
-                  : isPlan
-                    ? "text-cc-primary border-cc-primary/30 bg-cc-primary/8"
-                    : "text-cc-muted border-cc-border"
-              }`}
-              title="Toggle mode (Shift+Tab)"
-            >
-              {isPlan ? (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
-                  <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </svg>
-              )}
-              <span>{modeLabel}</span>
-            </button>
+            <ModeDropdown
+              modes={modes}
+              currentMode={currentMode}
+              isPlan={isPlan}
+              isConnected={isConnected}
+              modeLabel={modeLabel}
+              showModeDropdown={showModeDropdown}
+              setShowModeDropdown={setShowModeDropdown}
+              modeDropdownRef={modeDropdownRef}
+              onSelect={(mode) => { handleModeSelect(mode); setShowModeDropdown(false); }}
+            />
 
             <ModelSwitcher sessionId={sessionId} />
 
@@ -667,32 +672,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
               </svg>
             </button>
 
-            {/* Mode toggle */}
-            <button
-              onClick={toggleMode}
-              disabled={!isConnected}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
-                !isConnected
-                  ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
-                  : isPlan
-                    ? "text-cc-primary border-cc-primary/30 bg-cc-primary/8 hover:bg-cc-primary/12 cursor-pointer"
-                    : "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-              }`}
-              title="Toggle mode (Shift+Tab)"
-            >
-              {isPlan ? (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
-                  <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </svg>
-              )}
-              <span>{modeLabel}</span>
-            </button>
+            {/* Mode selector */}
+            <ModeDropdown
+              modes={modes}
+              currentMode={currentMode}
+              isPlan={isPlan}
+              isConnected={isConnected}
+              modeLabel={modeLabel}
+              showModeDropdown={showModeDropdown}
+              setShowModeDropdown={setShowModeDropdown}
+              modeDropdownRef={modeDropdownRef}
+              onSelect={(mode) => { handleModeSelect(mode); setShowModeDropdown(false); }}
+            />
 
             {/* Spacer */}
             <div className="flex-1" />
@@ -731,6 +722,85 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
         </div>
       </div>
+    </div>
+  );
+}
+
+interface ModeDropdownProps {
+  modes: ModeOption[];
+  currentMode: string;
+  isPlan: boolean;
+  isConnected: boolean;
+  modeLabel: string;
+  showModeDropdown: boolean;
+  setShowModeDropdown: (v: boolean) => void;
+  modeDropdownRef: React.RefObject<HTMLDivElement | null>;
+  onSelect: (mode: string) => void;
+}
+
+function ModeDropdown({
+  modes,
+  currentMode,
+  isPlan,
+  isConnected,
+  modeLabel,
+  showModeDropdown,
+  setShowModeDropdown,
+  modeDropdownRef,
+  onSelect,
+}: ModeDropdownProps) {
+  return (
+    <div className="relative" ref={modeDropdownRef}>
+      <button
+        onClick={() => setShowModeDropdown(!showModeDropdown)}
+        disabled={!isConnected}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
+          !isConnected
+            ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
+            : isPlan
+              ? "text-cc-primary border-cc-primary/30 bg-cc-primary/8 hover:bg-cc-primary/12 cursor-pointer"
+              : "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+        }`}
+        title="Switch permission mode (Shift+Tab)"
+        data-testid="mode-dropdown-trigger"
+      >
+        {isPlan ? (
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
+            <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+            <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
+        )}
+        <span>{modeLabel}</span>
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 opacity-50">
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </button>
+      {showModeDropdown && (
+        <div
+          className="absolute left-0 bottom-full mb-1 min-w-[140px] bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 py-1"
+          data-testid="mode-dropdown-menu"
+        >
+          {modes.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => onSelect(m.value)}
+              className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
+                m.value === currentMode
+                  ? "text-cc-primary font-medium"
+                  : "text-cc-fg"
+              }`}
+              data-testid={`mode-option-${m.value}`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

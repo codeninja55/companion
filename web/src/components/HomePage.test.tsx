@@ -424,7 +424,8 @@ describe("HomePage", () => {
   // ─── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   it("cycles permission mode on Shift+Tab", async () => {
-    // Shift+Tab should cycle through available modes (Agent -> Plan -> Agent).
+    // Shift+Tab should cycle through available modes:
+    // Agent -> Auto-edit -> Supervised -> Plan -> Agent
     render(<HomePage />);
     const textarea = screen.getByPlaceholderText("Fix a bug, build a feature, refactor code...");
     await waitFor(() => expect(textarea).toBeInTheDocument());
@@ -432,7 +433,15 @@ describe("HomePage", () => {
     // Default mode is "Agent" (bypassPermissions)
     expect(screen.getByText("Agent")).toBeInTheDocument();
 
-    // Press Shift+Tab to cycle to next mode (Plan)
+    // Press Shift+Tab to cycle to next mode (Auto-edit)
+    fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
+    expect(screen.getByText("Auto-edit")).toBeInTheDocument();
+
+    // Press Shift+Tab to cycle to Supervised
+    fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
+    expect(screen.getByText("Supervised")).toBeInTheDocument();
+
+    // Press Shift+Tab to cycle to Plan
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
     expect(screen.getByText("Plan")).toBeInTheDocument();
 
