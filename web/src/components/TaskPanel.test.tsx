@@ -1155,9 +1155,35 @@ describe("ClaudeTokenDetailsSection (Claude Code sessions)", () => {
     expect(screen.getByText("Cache Read")).toBeInTheDocument();
     // cacheCreationInputTokens is 0 so "Cache Write" should not render
     expect(screen.queryByText("Cache Write")).not.toBeInTheDocument();
-    // Context bar should render (use getAllByText since the panel header also says "Context")
-    expect(screen.getAllByText("Context").length).toBeGreaterThanOrEqual(2);
+    // Context bar should render with window size
     expect(screen.getByText("42%")).toBeInTheDocument();
+    // Context window size (200K) should appear
+    expect(screen.getByText("(200.0k)")).toBeInTheDocument();
+  });
+
+  it("shows compacting indicator when session is compacting", () => {
+    // When is_compacting is true, the context bar should show "Compacting…"
+    // instead of the percentage
+    resetStore({
+      sessions: new Map([["s1", {
+        backend_type: "claude",
+        total_cost_usd: 0.05,
+        num_turns: 10,
+        context_used_percent: 95,
+        is_compacting: true,
+        claude_token_details: {
+          inputTokens: 180_000,
+          outputTokens: 10_000,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          contextWindow: 200_000,
+        },
+      }]]),
+    });
+    render(<TaskPanel sessionId="s1" />);
+    expect(screen.getByText("Compacting…")).toBeInTheDocument();
+    // Percentage should not render while compacting
+    expect(screen.queryByText("95%")).not.toBeInTheDocument();
   });
 
   it("hides cache rows when counts are zero", () => {
