@@ -540,7 +540,7 @@ describe("terminal API", () => {
 // ===========================================================================
 describe("auth API", () => {
   it("getAuthQr sends GET to /api/auth/qr", async () => {
-    const data = { qrCodes: [{ label: "Local", url: "http://localhost:3456", qrDataUrl: "data:image/png;base64,abc" }] };
+    const data = { qrCodes: [{ label: "Local", url: "http://localhost:4567", qrDataUrl: "data:image/png;base64,abc" }] };
     mockFetch.mockResolvedValueOnce(mockResponse(data));
 
     const result = await api.getAuthQr();
@@ -925,45 +925,56 @@ describe("Linear issue-session linking", () => {
     teamId: "t1",
   };
 
-  it("linkLinearIssue sends PUT with issue body", async () => {
+  it("addLinearIssue sends POST with issue body", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
 
-    await api.linkLinearIssue("sess-1", mockIssue);
+    await api.addLinearIssue("sess-1", mockIssue);
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issue");
-    expect(opts.method).toBe("PUT");
+    expect(url).toBe("/api/sessions/sess-1/linear-issues");
+    expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual(mockIssue);
   });
 
-  it("unlinkLinearIssue sends DELETE", async () => {
+  it("removeLinearIssue sends DELETE with issueId", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
 
-    await api.unlinkLinearIssue("sess-1");
+    await api.removeLinearIssue("sess-1", "iss-1");
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issue");
+    expect(url).toBe("/api/sessions/sess-1/linear-issues");
+    expect(opts.method).toBe("DELETE");
+    expect(JSON.parse(opts.body)).toEqual({ issueId: "iss-1" });
+  });
+
+  it("removeAllLinearIssues sends DELETE without body", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
+
+    await api.removeAllLinearIssues("sess-1");
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe("/api/sessions/sess-1/linear-issues");
     expect(opts.method).toBe("DELETE");
   });
 
-  it("getLinkedLinearIssue sends GET without refresh by default", async () => {
-    const data = { issue: mockIssue, comments: [], labels: [] };
+  it("getLinkedLinearIssues sends GET without refresh by default", async () => {
+    const data = { issues: [mockIssue] };
     mockFetch.mockResolvedValueOnce(mockResponse(data));
 
-    const result = await api.getLinkedLinearIssue("sess-1");
+    const result = await api.getLinkedLinearIssues("sess-1");
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issue");
+    expect(url).toBe("/api/sessions/sess-1/linear-issues");
     expect(result).toEqual(data);
   });
 
-  it("getLinkedLinearIssue sends GET with refresh=true", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ issue: null }));
+  it("getLinkedLinearIssues sends GET with refresh=true", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ issues: [] }));
 
-    await api.getLinkedLinearIssue("sess-1", true);
+    await api.getLinkedLinearIssues("sess-1", true);
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issue?refresh=true");
+    expect(url).toBe("/api/sessions/sess-1/linear-issues?refresh=true");
   });
 
   it("addLinearComment sends POST with body text", async () => {

@@ -116,8 +116,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={false}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -131,8 +131,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -153,8 +153,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -176,8 +176,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -189,11 +189,11 @@ describe("LinearSection", () => {
   });
 
   it("selects an issue from the project issue list", async () => {
-    // Verifies that clicking an issue calls onIssueSelect and onBranchFromIssue.
+    // Verifies that clicking an issue calls onIssuesChange and onBranchFromIssue.
     mockGetLinearProjectMapping.mockResolvedValue({ mapping: sampleMapping });
     mockGetLinearProjectIssues.mockResolvedValue({ issues: [sampleIssue] });
 
-    const onIssueSelect = vi.fn();
+    const onIssuesChange = vi.fn();
     const onBranchFromIssue = vi.fn();
 
     render(
@@ -201,8 +201,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={onBranchFromIssue}
       />,
     );
@@ -215,7 +215,7 @@ describe("LinearSection", () => {
     const issueBtn = screen.getByText("ENG-1").closest("button")!;
     fireEvent.click(issueBtn);
 
-    expect(onIssueSelect).toHaveBeenCalledWith(sampleIssue);
+    expect(onIssuesChange).toHaveBeenCalledWith([sampleIssue]);
     expect(onBranchFromIssue).toHaveBeenCalledWith("eng-1-fix-bug", true);
   });
 
@@ -229,14 +229,14 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={sampleIssue}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[sampleIssue]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getByTitle("Remove issue")).toBeInTheDocument();
+      expect(screen.getByTitle("Remove ENG-1")).toBeInTheDocument();
     });
   });
 
@@ -247,8 +247,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -267,8 +267,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -279,8 +279,8 @@ describe("LinearSection", () => {
   });
 
   it("auto-selects issue after creation from modal", async () => {
-    // Verifies the onIssueSelect callback is called with the newly created issue.
-    const onIssueSelect = vi.fn();
+    // Verifies the onIssuesChange callback is called with the newly created issue.
+    const onIssuesChange = vi.fn();
     const onBranchFromIssue = vi.fn();
 
     render(
@@ -288,8 +288,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={onBranchFromIssue}
       />,
     );
@@ -301,9 +301,9 @@ describe("LinearSection", () => {
     // Simulate issue creation via the mock modal
     fireEvent.click(screen.getByText("mock-create"));
 
-    expect(onIssueSelect).toHaveBeenCalledWith(
+    expect(onIssuesChange).toHaveBeenCalledWith([
       expect.objectContaining({ identifier: "ENG-99", title: "Created Issue" }),
-    );
+    ]);
     expect(onBranchFromIssue).toHaveBeenCalled();
     // Modal should be closed
     expect(screen.queryByTestId("create-issue-modal")).not.toBeInTheDocument();
@@ -316,8 +316,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -343,8 +343,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -362,15 +362,15 @@ describe("LinearSection", () => {
     mockGetLinearProjectMapping.mockResolvedValue({ mapping: sampleMapping });
     mockGetLinearProjectIssues.mockResolvedValue({ issues: [] });
 
-    const onIssueSelect = vi.fn();
+    const onIssuesChange = vi.fn();
 
     render(
       <LinearSection
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -400,8 +400,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -429,8 +429,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -454,8 +454,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -479,8 +479,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -505,8 +505,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -539,8 +539,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -558,10 +558,10 @@ describe("LinearSection", () => {
   });
 
   it("selects an issue from the search dropdown and closes it", async () => {
-    // Verifies selecting a search result calls onIssueSelect and closes the dropdown.
+    // Verifies selecting a search result calls onIssuesChange and closes the dropdown.
     mockSearchLinearIssues.mockResolvedValue({ issues: [sampleIssue] });
 
-    const onIssueSelect = vi.fn();
+    const onIssuesChange = vi.fn();
     const onBranchFromIssue = vi.fn();
 
     render(
@@ -569,8 +569,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={onBranchFromIssue}
       />,
     );
@@ -588,7 +588,7 @@ describe("LinearSection", () => {
     const issueBtn = screen.getByText(/ENG-1/).closest("button")!;
     fireEvent.click(issueBtn);
 
-    expect(onIssueSelect).toHaveBeenCalledWith(sampleIssue);
+    expect(onIssuesChange).toHaveBeenCalledWith([sampleIssue]);
     expect(onBranchFromIssue).toHaveBeenCalled();
   });
 
@@ -602,8 +602,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -624,25 +624,25 @@ describe("LinearSection", () => {
     mockGetLinearProjectMapping.mockResolvedValue({ mapping: sampleMapping });
     mockGetLinearProjectIssues.mockResolvedValue({ issues: [sampleIssue] });
 
-    const onIssueSelect = vi.fn();
+    const onIssuesChange = vi.fn();
 
     render(
       <LinearSection
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={sampleIssue}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[sampleIssue]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={vi.fn()}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getByTitle("Remove issue")).toBeInTheDocument();
+      expect(screen.getByTitle("Remove ENG-1")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTitle("Remove issue"));
-    expect(onIssueSelect).toHaveBeenCalledWith(null);
+    fireEvent.click(screen.getByTitle("Remove ENG-1"));
+    expect(onIssuesChange).toHaveBeenCalledWith([]);
   });
 
   it("closes search dropdown via Close button", async () => {
@@ -652,8 +652,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -681,8 +681,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -709,8 +709,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -733,8 +733,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -763,15 +763,15 @@ describe("LinearSection", () => {
 
   it("clears issue via the remove badge button when no mapping", async () => {
     // Verifies handleClearIssue clears the selected issue and search state.
-    const onIssueSelect = vi.fn();
+    const onIssuesChange = vi.fn();
 
     render(
       <LinearSection
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={sampleIssue}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[sampleIssue]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -789,7 +789,7 @@ describe("LinearSection", () => {
     mockGetLinearProjectMapping.mockResolvedValue({ mapping: sampleMapping });
     mockGetLinearProjectIssues.mockResolvedValue({ issues: [sampleIssue] });
 
-    const onIssueSelect = vi.fn();
+    const onIssuesChange = vi.fn();
     const onBranchFromIssue = vi.fn();
 
     render(
@@ -797,8 +797,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={onIssueSelect}
+        selectedLinearIssues={[]}
+        onIssuesChange={onIssuesChange}
         onBranchFromIssue={onBranchFromIssue}
       />,
     );
@@ -827,8 +827,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );
@@ -849,8 +849,8 @@ describe("LinearSection", () => {
         cwd="/repo"
         gitRepoInfo={defaultGitRepoInfo}
         linearConfigured={true}
-        selectedLinearIssue={null}
-        onIssueSelect={vi.fn()}
+        selectedLinearIssues={[]}
+        onIssuesChange={vi.fn()}
         onBranchFromIssue={vi.fn()}
       />,
     );

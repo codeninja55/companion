@@ -3,9 +3,13 @@ import { createPortal } from "react-dom";
 
 export type LinearTransitionChoice = "none" | "backlog" | "configured";
 
+interface ArchiveLinearIssueInfo {
+  identifier: string;
+  stateName: string;
+}
+
 interface ArchiveLinearModalProps {
-  issueIdentifier: string;
-  issueStateName: string;
+  issues: ArchiveLinearIssueInfo[];
   isContainerized: boolean;
   archiveTransitionConfigured: boolean;
   archiveTransitionStateName?: string;
@@ -15,8 +19,7 @@ interface ArchiveLinearModalProps {
 }
 
 export function ArchiveLinearModal({
-  issueIdentifier,
-  issueStateName,
+  issues,
   isContainerized,
   archiveTransitionConfigured,
   archiveTransitionStateName,
@@ -67,11 +70,27 @@ export function ArchiveLinearModal({
         )}
 
         {/* Linear issue info */}
-        <p className="text-xs text-cc-muted mb-3">
-          This session is linked to <strong className="text-cc-fg">{issueIdentifier}</strong>{" "}
-          <span className="text-cc-muted">({issueStateName})</span>.
-          What should happen to the issue?
-        </p>
+        <div className="text-xs text-cc-muted mb-3">
+          {issues.length === 1 ? (
+            <p>
+              This session is linked to <strong className="text-cc-fg">{issues[0].identifier}</strong>{" "}
+              <span className="text-cc-muted">({issues[0].stateName})</span>.
+              What should happen to the issue?
+            </p>
+          ) : (
+            <>
+              <p className="mb-1.5">This session is linked to {issues.length} issues. The chosen transition will apply to all:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {issues.map((issue) => (
+                  <li key={issue.identifier}>
+                    <strong className="text-cc-fg">{issue.identifier}</strong>{" "}
+                    <span className="text-cc-muted">({issue.stateName})</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
 
         {/* Radio group */}
         <fieldset className="space-y-2 mb-4">

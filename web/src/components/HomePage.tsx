@@ -112,7 +112,7 @@ export function HomePage() {
   const [error, setError] = useState("");
   const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
   const [linearConfigured, setLinearConfigured] = useState(false);
-  const [selectedLinearIssue, setSelectedLinearIssue] = useState<LinearIssue | null>(null);
+  const [selectedLinearIssues, setSelectedLinearIssues] = useState<LinearIssue[]>([]);
 
   const MODELS = dynamicModels || getModelsForBackend(backend);
   const MODES = getModesForBackend(backend);
@@ -584,19 +584,12 @@ export function HomePage() {
   }
 
   function buildInitialMessage(msg: string): string {
-    if (!selectedLinearIssue) return msg;
-    const description = (selectedLinearIssue.description ?? "").trim();
-    const context = [
-      "Linear issue context:",
-      `- Identifier: ${selectedLinearIssue.identifier}`,
-      `- Title: ${selectedLinearIssue.title}`,
-      selectedLinearIssue.stateName ? `- State: ${selectedLinearIssue.stateName}` : "",
-      selectedLinearIssue.priorityLabel ? `- Priority: ${selectedLinearIssue.priorityLabel}` : "",
-      selectedLinearIssue.teamName ? `- Team: ${selectedLinearIssue.teamName}` : "",
-      `- URL: ${selectedLinearIssue.url}`,
-      description ? `- Description:\n${description}` : "",
-    ].filter(Boolean).join("\n");
-    return `${context}\n\nUser request:\n${msg}`;
+    if (selectedLinearIssues.length === 0) return msg;
+    const lines = ["Linear issue context:"];
+    for (const issue of selectedLinearIssues) {
+      lines.push(`- ${issue.identifier}: ${issue.title}`);
+    }
+    return `${lines.join("\n")}\n\nUser request:\n${msg}`;
   }
 
   async function handleSend() {
@@ -751,13 +744,15 @@ export function HomePage() {
         });
       }
 
-      // Auto-link Linear issue if one was selected
-      if (selectedLinearIssue) {
-        api.linkLinearIssue(sessionId, selectedLinearIssue)
-          .then(() => useStore.getState().setLinkedLinearIssue(sessionId, selectedLinearIssue))
-          .catch(() => { /* fire-and-forget: linking is best-effort */ });
-        // Fire-and-forget: transition Linear issue to configured status
-        api.transitionLinearIssue(selectedLinearIssue.id).catch(() => {
+      // Auto-link Linear issues if any were selected
+      if (selectedLinearIssues.length > 0) {
+        for (const issue of selectedLinearIssues) {
+          api.addLinearIssue(sessionId, issue)
+            .then(() => useStore.getState().addLinkedLinearIssue(sessionId, issue))
+            .catch(() => { /* fire-and-forget: linking is best-effort */ });
+        }
+        // Fire-and-forget: transition the first issue to configured status
+        api.transitionLinearIssue(selectedLinearIssues[0].id).catch(() => {
           /* fire-and-forget: status transition is best-effort */
         });
       }
@@ -848,10 +843,10 @@ export function HomePage() {
     setBranches(loadedBranches);
   }, []);
 
-  const handleIssueSelect = useCallback((issue: LinearIssue | null) => {
-    setSelectedLinearIssue(issue);
-    if (!issue && gitRepoInfo) {
-      // Revert branch to current when clearing Linear issue
+  const handleIssueSelect = useCallback((issues: LinearIssue[]) => {
+    setSelectedLinearIssues(issues);
+    if (issues.length === 0 && gitRepoInfo) {
+      // Revert branch to current when clearing all Linear issues
       setSelectedBranch(gitRepoInfo.currentBranch);
       setIsNewBranch(false);
     }
@@ -917,21 +912,23 @@ export function HomePage() {
                 menuRef={mention.mentionMenuRef}
                 className="absolute left-2 right-2 bottom-full mb-1"
               />
-              {selectedLinearIssue && (
-                <div className="px-3 pt-3">
-                  <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-cc-border bg-cc-hover/60 px-2.5 py-1.5 text-[11px] text-cc-muted">
-                    <span className="shrink-0">Linear</span>
-                    <span className="font-mono-code shrink-0">{selectedLinearIssue.identifier}</span>
-                    <span className="truncate">{selectedLinearIssue.title}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleIssueSelect(null)}
-                      className="shrink-0 rounded px-1 text-cc-muted hover:text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-                      title="Remove Linear issue"
-                    >
-                      ×
-                    </button>
-                  </div>
+              {selectedLinearIssues.length > 0 && (
+                <div className="px-3 pt-3 flex flex-wrap gap-1.5">
+                  {selectedLinearIssues.map((issue) => (
+                    <div key={issue.id} className="inline-flex max-w-full items-center gap-2 rounded-md border border-cc-border bg-cc-hover/60 px-2.5 py-1.5 text-[11px] text-cc-muted">
+                      <span className="shrink-0">Linear</span>
+                      <span className="font-mono-code shrink-0">{issue.identifier}</span>
+                      <span className="truncate">{issue.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleIssueSelect(selectedLinearIssues.filter((i) => i.id !== issue.id))}
+                        className="shrink-0 rounded px-1 text-cc-muted hover:text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                        title={`Remove ${issue.identifier}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
               <textarea
@@ -1669,8 +1666,8 @@ export function HomePage() {
             cwd={cwd}
             gitRepoInfo={gitRepoInfo}
             linearConfigured={linearConfigured}
-            selectedLinearIssue={selectedLinearIssue}
-            onIssueSelect={handleIssueSelect}
+            selectedLinearIssues={selectedLinearIssues}
+            onIssuesChange={handleIssueSelect}
             onBranchFromIssue={handleBranchFromIssue}
           />
         </div>

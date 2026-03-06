@@ -463,15 +463,15 @@ export function registerLinearRoutes(api: Hono): void {
     }
   });
 
-  // ─── Linear issue <-> session association ───────────────────────────
+  // ─── Linear issues <-> session association (plural) ─────────────────
 
-  api.put("/sessions/:id/linear-issue", async (c) => {
+  api.post("/sessions/:id/linear-issues", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     if (!body.id || !body.identifier || !body.title || !body.url) {
       return c.json({ error: "id, identifier, title, and url are required" }, 400);
     }
-    sessionLinearIssues.setLinearIssue(id, {
+    sessionLinearIssues.addLinearIssue(id, {
       id: String(body.id),
       identifier: String(body.identifier),
       title: String(body.title),
@@ -490,126 +490,142 @@ export function registerLinearRoutes(api: Hono): void {
     return c.json({ ok: true });
   });
 
-  api.get("/sessions/:id/linear-issue", async (c) => {
+  api.get("/sessions/:id/linear-issues", async (c) => {
     const id = c.req.param("id");
-    const stored = sessionLinearIssues.getLinearIssue(id);
-    if (!stored) return c.json({ issue: null });
+    const stored = sessionLinearIssues.getLinearIssues(id);
+    if (stored.length === 0) return c.json({ issues: [] });
 
     const refresh = c.req.query("refresh") === "true";
-    if (!refresh) return c.json({ issue: stored });
+    if (!refresh) return c.json({ issues: stored });
 
-    // Fetch fresh data from Linear API
+    // Fetch fresh data from Linear API for each issue
     const settings = getSettings();
     const linearApiKey = settings.linearApiKey.trim();
-    if (!linearApiKey) return c.json({ issue: stored });
+    if (!linearApiKey) return c.json({ issues: stored });
 
-    try {
-      const cacheKey = `issue:${stored.id}`;
-      const result = await linearCache.getOrFetch(cacheKey, 30_000, async () => {
-        const response = await fetch("https://api.linear.app/graphql", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: linearApiKey,
-          },
-          body: JSON.stringify({
-            query: `
-              query CompanionIssueFetch($id: String!) {
-                issue(id: $id) {
-                  id identifier title description url branchName priorityLabel
-                  state { name type }
-                  team { id key name }
-                  comments(last: 5) {
-                    nodes {
-                      id body createdAt
-                      user { id name displayName avatarUrl }
+    const refreshedIssues: Array<{
+      issue: typeof stored[number];
+      comments?: Array<{ id: string; body: string; createdAt: string; userName: string; userAvatarUrl: string | null }>;
+      assignee?: { name: string; avatarUrl: string | null } | null;
+      labels?: Array<{ id: string; name: string; color: string }>;
+    }> = [];
+
+    for (const storedIssue of stored) {
+      try {
+        const cacheKey = `issue:${storedIssue.id}`;
+        const result = await linearCache.getOrFetch(cacheKey, 30_000, async () => {
+          const response = await fetch("https://api.linear.app/graphql", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: linearApiKey,
+            },
+            body: JSON.stringify({
+              query: `
+                query CompanionIssueFetch($id: String!) {
+                  issue(id: $id) {
+                    id identifier title description url branchName priorityLabel
+                    state { name type }
+                    team { id key name }
+                    comments(last: 5) {
+                      nodes {
+                        id body createdAt
+                        user { id name displayName avatarUrl }
+                      }
                     }
+                    assignee { id name displayName avatarUrl }
+                    labels { nodes { id name color } }
                   }
-                  assignee { id name displayName avatarUrl }
-                  labels { nodes { id name color } }
                 }
-              }
-            `,
-            variables: { id: stored.id },
-          }),
-        });
+              `,
+              variables: { id: storedIssue.id },
+            }),
+          });
 
-        const json = await response.json().catch(() => ({})) as {
-          data?: {
-            issue?: {
-              id: string;
-              identifier: string;
-              title: string;
-              description?: string | null;
-              url: string;
-              branchName?: string | null;
-              priorityLabel?: string | null;
-              state?: { name?: string | null; type?: string | null } | null;
-              team?: { id?: string | null; key?: string | null; name?: string | null } | null;
-              comments?: { nodes?: Array<{
+          const json = await response.json().catch(() => ({})) as {
+            data?: {
+              issue?: {
                 id: string;
-                body: string;
-                createdAt: string;
-                user?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
-              }> } | null;
-              assignee?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
-              labels?: { nodes?: Array<{ id: string; name: string; color: string }> } | null;
-            } | null;
+                identifier: string;
+                title: string;
+                description?: string | null;
+                url: string;
+                branchName?: string | null;
+                priorityLabel?: string | null;
+                state?: { name?: string | null; type?: string | null } | null;
+                team?: { id?: string | null; key?: string | null; name?: string | null } | null;
+                comments?: { nodes?: Array<{
+                  id: string;
+                  body: string;
+                  createdAt: string;
+                  user?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
+                }> } | null;
+                assignee?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
+                labels?: { nodes?: Array<{ id: string; name: string; color: string }> } | null;
+              } | null;
+            };
+            errors?: Array<{ message?: string }>;
           };
-          errors?: Array<{ message?: string }>;
-        };
 
-        return json.data?.issue ?? null;
-      });
-
-      if (result) {
-        const updated = {
-          id: result.id,
-          identifier: result.identifier,
-          title: result.title,
-          description: result.description || "",
-          url: result.url,
-          branchName: result.branchName || "",
-          priorityLabel: result.priorityLabel || "",
-          stateName: result.state?.name || "",
-          stateType: result.state?.type || "",
-          teamName: result.team?.name || "",
-          teamKey: result.team?.key || "",
-          teamId: result.team?.id || "",
-          assigneeName: result.assignee?.displayName || result.assignee?.name || "",
-          updatedAt: new Date().toISOString(),
-        };
-        sessionLinearIssues.setLinearIssue(id, updated);
-        return c.json({
-          issue: updated,
-          comments: (result.comments?.nodes || []).map((comment) => ({
-            id: comment.id,
-            body: comment.body,
-            createdAt: comment.createdAt,
-            userName: comment.user?.displayName || comment.user?.name || "Unknown",
-            userAvatarUrl: comment.user?.avatarUrl || null,
-          })),
-          assignee: result.assignee ? {
-            name: result.assignee.displayName || result.assignee.name || "",
-            avatarUrl: result.assignee.avatarUrl || null,
-          } : null,
-          labels: (result.labels?.nodes || []).map((l) => ({
-            id: l.id,
-            name: l.name,
-            color: l.color,
-          })),
+          return json.data?.issue ?? null;
         });
+
+        if (result) {
+          const updated = {
+            id: result.id,
+            identifier: result.identifier,
+            title: result.title,
+            description: result.description || "",
+            url: result.url,
+            branchName: result.branchName || "",
+            priorityLabel: result.priorityLabel || "",
+            stateName: result.state?.name || "",
+            stateType: result.state?.type || "",
+            teamName: result.team?.name || "",
+            teamKey: result.team?.key || "",
+            teamId: result.team?.id || "",
+            assigneeName: result.assignee?.displayName || result.assignee?.name || "",
+            updatedAt: new Date().toISOString(),
+          };
+          sessionLinearIssues.addLinearIssue(id, updated);
+          refreshedIssues.push({
+            issue: updated,
+            comments: (result.comments?.nodes || []).map((comment) => ({
+              id: comment.id,
+              body: comment.body,
+              createdAt: comment.createdAt,
+              userName: comment.user?.displayName || comment.user?.name || "Unknown",
+              userAvatarUrl: comment.user?.avatarUrl || null,
+            })),
+            assignee: result.assignee ? {
+              name: result.assignee.displayName || result.assignee.name || "",
+              avatarUrl: result.assignee.avatarUrl || null,
+            } : null,
+            labels: (result.labels?.nodes || []).map((l) => ({
+              id: l.id,
+              name: l.name,
+              color: l.color,
+            })),
+          });
+        } else {
+          refreshedIssues.push({ issue: storedIssue });
+        }
+      } catch {
+        refreshedIssues.push({ issue: storedIssue });
       }
-    } catch {
-      // Fall through to return stored data on error
     }
 
-    return c.json({ issue: stored });
+    return c.json({ issues: refreshedIssues.map((r) => r.issue), details: refreshedIssues });
   });
 
-  api.delete("/sessions/:id/linear-issue", (c) => {
+  api.delete("/sessions/:id/linear-issues", async (c) => {
     const id = c.req.param("id");
-    sessionLinearIssues.removeLinearIssue(id);
+    const body = await c.req.json().catch(() => ({})) as { issueId?: string };
+    if (body.issueId) {
+      sessionLinearIssues.removeLinearIssue(id, body.issueId);
+    } else {
+      sessionLinearIssues.removeAllLinearIssues(id);
+    }
     return c.json({ ok: true });
   });
 

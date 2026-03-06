@@ -51,7 +51,7 @@ describe("buildRemoteLaunchCommand", () => {
       conn,
       testProfile,
       "session-123",
-      3456,
+      4567,
       "/home/user/project",
     );
 
@@ -59,7 +59,7 @@ describe("buildRemoteLaunchCommand", () => {
     expect(args).toContain("-o");
     expect(args).toContain("ExitOnForwardFailure=yes");
     expect(args).toContain("-R");
-    expect(args).toContain("9500:localhost:3456");
+    expect(args).toContain("9500:localhost:4567");
     expect(args).toContain("-p");
     expect(args).toContain("22");
     expect(args).toContain("-i");
@@ -81,7 +81,7 @@ describe("buildRemoteLaunchCommand", () => {
       conn,
       pwProfile,
       "session-456",
-      3456,
+      4567,
       "/workspace",
     );
 
@@ -95,7 +95,7 @@ describe("buildRemoteLaunchCommand", () => {
       conn,
       testProfile,
       "session-789",
-      3456,
+      4567,
       "/home/user/project",
     );
 
@@ -113,7 +113,7 @@ describe("buildRemoteLaunchCommand", () => {
     const conn = makeConn();
 
     expect(() =>
-      buildRemoteLaunchCommand(conn, badProfile, "s", 3456, "/tmp"),
+      buildRemoteLaunchCommand(conn, badProfile, "s", 4567, "/tmp"),
     ).toThrow("Invalid host");
   });
 
@@ -125,7 +125,7 @@ describe("buildRemoteLaunchCommand", () => {
     const conn = makeConn();
 
     expect(() =>
-      buildRemoteLaunchCommand(conn, badProfile, "s", 3456, "/tmp"),
+      buildRemoteLaunchCommand(conn, badProfile, "s", 4567, "/tmp"),
     ).toThrow("Invalid port");
   });
 
@@ -137,7 +137,7 @@ describe("buildRemoteLaunchCommand", () => {
     const conn = makeConn();
 
     expect(() =>
-      buildRemoteLaunchCommand(conn, badProfile, "s", 3456, "/tmp"),
+      buildRemoteLaunchCommand(conn, badProfile, "s", 4567, "/tmp"),
     ).toThrow("Invalid username");
   });
 });

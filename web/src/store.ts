@@ -95,8 +95,8 @@ interface AppState {
   // PR status per session (pushed by server via WebSocket)
   prStatus: Map<string, PRStatusResponse>;
 
-  // Linear issues linked to sessions
-  linkedLinearIssues: Map<string, LinearIssue>;
+  // Linear issues linked to sessions (plural — each session can have multiple)
+  linkedLinearIssues: Map<string, LinearIssue[]>;
 
   // MCP servers per session
   mcpServers: Map<string, McpServerDetail[]>;
@@ -204,7 +204,9 @@ interface AppState {
   setPRStatus: (sessionId: string, status: PRStatusResponse) => void;
 
   // Linear issue actions
-  setLinkedLinearIssue: (sessionId: string, issue: LinearIssue | null) => void;
+  setLinkedLinearIssues: (sessionId: string, issues: LinearIssue[]) => void;
+  addLinkedLinearIssue: (sessionId: string, issue: LinearIssue) => void;
+  removeLinkedLinearIssue: (sessionId: string, issueId: string) => void;
 
   // MCP actions
   setMcpServers: (sessionId: string, servers: McpServerDetail[]) => void;
@@ -802,11 +804,39 @@ export const useStore = create<AppState>((set) => ({
       return { prStatus };
     }),
 
-  setLinkedLinearIssue: (sessionId, issue) =>
+  setLinkedLinearIssues: (sessionId, issues) =>
     set((s) => {
       const linkedLinearIssues = new Map(s.linkedLinearIssues);
-      if (issue) {
-        linkedLinearIssues.set(sessionId, issue);
+      if (issues.length > 0) {
+        linkedLinearIssues.set(sessionId, issues);
+      } else {
+        linkedLinearIssues.delete(sessionId);
+      }
+      return { linkedLinearIssues };
+    }),
+
+  addLinkedLinearIssue: (sessionId, issue) =>
+    set((s) => {
+      const linkedLinearIssues = new Map(s.linkedLinearIssues);
+      const existing = linkedLinearIssues.get(sessionId) ?? [];
+      const idx = existing.findIndex((i) => i.id === issue.id);
+      if (idx >= 0) {
+        const updated = [...existing];
+        updated[idx] = issue;
+        linkedLinearIssues.set(sessionId, updated);
+      } else {
+        linkedLinearIssues.set(sessionId, [...existing, issue]);
+      }
+      return { linkedLinearIssues };
+    }),
+
+  removeLinkedLinearIssue: (sessionId, issueId) =>
+    set((s) => {
+      const linkedLinearIssues = new Map(s.linkedLinearIssues);
+      const existing = linkedLinearIssues.get(sessionId) ?? [];
+      const filtered = existing.filter((i) => i.id !== issueId);
+      if (filtered.length > 0) {
+        linkedLinearIssues.set(sessionId, filtered);
       } else {
         linkedLinearIssues.delete(sessionId);
       }

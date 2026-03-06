@@ -6,8 +6,7 @@ import "@testing-library/jest-dom";
 import { ArchiveLinearModal } from "./ArchiveLinearModal.js";
 
 const defaultProps = {
-  issueIdentifier: "ENG-42",
-  issueStateName: "In Progress",
+  issues: [{ identifier: "ENG-42", stateName: "In Progress" }],
   isContainerized: false,
   archiveTransitionConfigured: false,
   archiveTransitionStateName: undefined,

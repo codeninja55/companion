@@ -21,7 +21,7 @@ const mockApi = {
   archiveSession: vi.fn().mockResolvedValue({}),
   unarchiveSession: vi.fn().mockResolvedValue({}),
   renameSession: vi.fn().mockResolvedValue({}),
-  getArchiveInfo: vi.fn().mockResolvedValue({ hasLinkedIssue: false, issueNotDone: false }),
+  getArchiveInfo: vi.fn().mockResolvedValue({ hasLinkedIssues: false, issueNotDone: false }),
 };
 
 vi.mock("../api.js", () => ({
@@ -1310,22 +1310,22 @@ describe("Sidebar", () => {
     // shows the ArchiveLinearModal instead of archiving directly.
     const session = makeSession("s1", { is_containerized: false });
     const sdk = makeSdkSession("s1");
-    const linkedIssues = new Map<string, unknown>([["s1", {
+    const linkedIssues = new Map<string, unknown>([["s1", [{
       id: "issue-1",
       identifier: "ENG-42",
       title: "Test",
       stateType: "started",
       stateName: "In Progress",
-    }]]);
+    }]]]);
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
       linkedLinearIssues: linkedIssues,
     });
     mockApi.getArchiveInfo.mockResolvedValue({
-      hasLinkedIssue: true,
+      hasLinkedIssues: true,
       issueNotDone: true,
-      issue: { id: "issue-1", identifier: "ENG-42", stateName: "In Progress", stateType: "started", teamId: "team-1" },
+      issues: [{ id: "issue-1", identifier: "ENG-42", stateName: "In Progress", stateType: "started", teamId: "team-1" }],
       hasBacklogState: true,
       archiveTransitionConfigured: false,
     });
@@ -1367,13 +1367,13 @@ describe("Sidebar", () => {
     // Verifies that completed issues don't trigger the modal.
     const session = makeSession("s1", { is_containerized: false });
     const sdk = makeSdkSession("s1");
-    const linkedIssues = new Map<string, unknown>([["s1", {
+    const linkedIssues = new Map<string, unknown>([["s1", [{
       id: "issue-1",
       identifier: "ENG-42",
       title: "Test",
       stateType: "completed",
       stateName: "Done",
-    }]]);
+    }]]]);
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
