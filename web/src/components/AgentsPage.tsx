@@ -1403,9 +1403,6 @@ function AgentEditor({
                       {platform.adapter === "linear" && (platform.apiKey || platform.clientId) && (
                         <span className="w-2 h-2 rounded-full bg-cc-success flex-shrink-0" title="Credentials configured" />
                       )}
-                      {platform.adapter === "github" && (platform.token || platform.appId) && (
-                        <span className="w-2 h-2 rounded-full bg-cc-success flex-shrink-0" title="Credentials configured" />
-                      )}
                       <button
                         onClick={() => {
                           const updated = form.chatPlatforms.filter((_, i) => i !== idx);
@@ -1525,83 +1522,14 @@ function AgentEditor({
                       </div>
                     )}
 
-                    {platform.adapter === "github" && (
-                      <div className="space-y-1.5 pl-2 border-l-2 border-cc-border/30">
-                        <p className="text-[10px] text-cc-muted font-medium">GitHub Credentials</p>
-                        <input
-                          type="password"
-                          value={platform.token}
-                          aria-label="GitHub Personal Access Token"
-                          onChange={(e) => {
-                            const updated = [...form.chatPlatforms];
-                            updated[idx] = { ...updated[idx], token: e.target.value };
-                            updateField("chatPlatforms", updated);
-                          }}
-                          placeholder={isMaskedValue(platform.token) ? "Configured (enter new value to update)" : "Personal Access Token"}
-                          className="w-full px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                        />
-                        <div className="flex gap-1.5">
-                          <input
-                            value={platform.appId}
-                            aria-label="GitHub App ID"
-                            onChange={(e) => {
-                              const updated = [...form.chatPlatforms];
-                              updated[idx] = { ...updated[idx], appId: e.target.value };
-                              updateField("chatPlatforms", updated);
-                            }}
-                            placeholder="GitHub App ID (alternative)"
-                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                          />
-                          <input
-                            type="password"
-                            value={platform.privateKey}
-                            aria-label="GitHub App Private Key"
-                            onChange={(e) => {
-                              const updated = [...form.chatPlatforms];
-                              updated[idx] = { ...updated[idx], privateKey: e.target.value };
-                              updateField("chatPlatforms", updated);
-                            }}
-                            placeholder="App Private Key (PEM)"
-                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                          />
-                        </div>
-                        <div className="flex gap-1.5">
-                          <input
-                            type="password"
-                            value={isMaskedValue(platform.webhookSecret) ? "" : platform.webhookSecret}
-                            aria-label="GitHub Webhook Secret"
-                            onChange={(e) => {
-                              const updated = [...form.chatPlatforms];
-                              updated[idx] = { ...updated[idx], webhookSecret: e.target.value };
-                              updateField("chatPlatforms", updated);
-                            }}
-                            placeholder={isMaskedValue(platform.webhookSecret) ? "Configured — paste new value to update" : "Paste webhook secret from GitHub"}
-                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                            title="Webhook signing secret (from GitHub)"
-                          />
-                          <input
-                            value={platform.userName}
-                            aria-label="GitHub Bot Username"
-                            onChange={(e) => {
-                              const updated = [...form.chatPlatforms];
-                              updated[idx] = { ...updated[idx], userName: e.target.value };
-                              updateField("chatPlatforms", updated);
-                            }}
-                            placeholder="Bot username (default: companion)"
-                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {(platform.adapter === "slack" || platform.adapter === "discord") && (
+                    {(platform.adapter === "github" || platform.adapter === "slack" || platform.adapter === "discord") && (
                       <p className="text-[10px] text-cc-muted italic pl-2">
-                        {platform.adapter === "slack" ? "Slack" : "Discord"} adapter coming soon.
+                        {platform.adapter === "github" ? "GitHub" : platform.adapter === "slack" ? "Slack" : "Discord"} adapter coming soon. Credentials will be configurable once runtime support ships.
                       </p>
                     )}
 
-                    {/* Webhook URL (shown for saved agents with credentials) */}
-                    {editingId && (platform.apiKey || platform.clientId || platform.token || platform.appId) && (
+                    {/* Webhook URL (shown for saved agents with credentials on supported adapters) */}
+                    {editingId && platform.adapter === "linear" && (platform.apiKey || platform.clientId) && (
                       <div className="space-y-1 pl-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] text-cc-muted">Webhook URL:</span>

@@ -3,6 +3,13 @@
 /** Supported Chat SDK adapter names */
 export type ChatAdapterName = "linear" | "github" | "slack" | "discord";
 
+/**
+ * Adapters that have a runtime implementation (Chat SDK adapter package available).
+ * Used to gate UI credential fields and webhook URL display for adapters that
+ * are schema-defined but not yet runnable.
+ */
+export const CHAT_ADAPTERS_WITH_RUNTIME = new Set<ChatAdapterName>(["linear"]);
+
 /** Credentials for the Linear Chat SDK adapter */
 export interface LinearChatCredentials {
   /** Linear API key (personal) — alternative to OAuth */
