@@ -883,15 +883,15 @@ describe("stripChatCredentials", () => {
 });
 
 // ===========================================================================
-// ensureChatWebhookSecrets (tested via createAgent and updateAgent)
+// Chat webhook secret handling (tested via createAgent and updateAgent)
 // ===========================================================================
-describe("ensureChatWebhookSecrets", () => {
-  it("auto-generates webhookSecret for chat bindings with credentials but no webhookSecret", () => {
-    // When a chat platform binding has credentials but no webhookSecret,
-    // createAgent should auto-generate one (48-char hex string from 24 random bytes)
+describe("chat webhookSecret handling", () => {
+  it("does not auto-generate webhookSecret for chat bindings missing one", () => {
+    // The webhookSecret must match the external service's signing secret.
+    // Auto-generating a random value would cause signature verification failures.
     const agent = agentStore.createAgent(
       makeAgentInput({
-        name: "Auto Webhook Secret Agent",
+        name: "No Auto Secret Agent",
         triggers: {
           chat: {
             enabled: true,
@@ -901,7 +901,7 @@ describe("ensureChatWebhookSecrets", () => {
                 autoSubscribe: true,
                 credentials: {
                   apiKey: "lin_api_key_value",
-                  // webhookSecret intentionally omitted
+                  // webhookSecret intentionally omitted — must stay omitted
                 },
               },
             ],
@@ -911,15 +911,13 @@ describe("ensureChatWebhookSecrets", () => {
     );
 
     const creds = agent.triggers!.chat!.platforms[0].credentials as Record<string, unknown>;
-    // webhookSecret should have been auto-generated
-    expect(creds.webhookSecret).toBeDefined();
-    expect(typeof creds.webhookSecret).toBe("string");
-    expect(creds.webhookSecret as string).toHaveLength(48);
-    expect(creds.webhookSecret as string).toMatch(/^[0-9a-f]{48}$/);
+    // webhookSecret should NOT be auto-generated
+    expect(creds.webhookSecret).toBeUndefined();
   });
 
   it("preserves explicitly provided webhookSecret in chat credentials", () => {
-    // When webhookSecret is already set, ensureChatWebhookSecrets should not overwrite it
+    // When webhookSecret is set by the user (matching the external service),
+    // it should be stored as-is
     const agent = agentStore.createAgent(
       makeAgentInput({
         name: "Explicit Chat Secret Agent",
@@ -945,8 +943,8 @@ describe("ensureChatWebhookSecrets", () => {
     expect(creds.webhookSecret).toBe("my-explicit-secret");
   });
 
-  it("auto-generates webhookSecret via updateAgent when adding chat platforms", () => {
-    // Create agent without chat triggers, then update to add them
+  it("does not auto-generate webhookSecret via updateAgent when adding chat platforms", () => {
+    // Same as create: webhook secrets must come from the external service
     const agent = agentStore.createAgent(makeAgentInput({ name: "Update Chat Agent" }));
 
     const updated = agentStore.updateAgent("update-chat-agent", {
@@ -959,7 +957,7 @@ describe("ensureChatWebhookSecrets", () => {
               autoSubscribe: true,
               credentials: {
                 apiKey: "lin_key_for_update",
-                // webhookSecret intentionally omitted — should be auto-generated
+                // webhookSecret intentionally omitted — must stay omitted
               },
             },
           ],
@@ -968,9 +966,7 @@ describe("ensureChatWebhookSecrets", () => {
     });
 
     const creds = updated!.triggers!.chat!.platforms[0].credentials as Record<string, unknown>;
-    expect(creds.webhookSecret).toBeDefined();
-    expect(creds.webhookSecret as string).toHaveLength(48);
-    expect(creds.webhookSecret as string).toMatch(/^[0-9a-f]{48}$/);
+    expect(creds.webhookSecret).toBeUndefined();
   });
 
   it("does not add webhookSecret to bindings without credentials", () => {

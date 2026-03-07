@@ -18,6 +18,7 @@ import type { WsBridge } from "./ws-bridge.js";
 import type { BrowserIncomingMessage } from "./session-types.js";
 import * as agentStore from "./agent-store.js";
 import type { AgentConfig, ChatAdapterName, ChatPlatformBinding } from "./agent-types.js";
+import { CHAT_ADAPTERS_WITH_RUNTIME } from "./agent-types.js";
 
 type WebhookHandler = (req: Request, opts?: { waitUntil?: (task: Promise<unknown>) => void }) => Promise<Response>;
 
@@ -57,6 +58,14 @@ function extractTextFromAssistant(msg: BrowserIncomingMessage): string {
 function createAdapterForBinding(binding: ChatPlatformBinding): Adapter | null {
   if (!binding.credentials) return null;
 
+  if (!CHAT_ADAPTERS_WITH_RUNTIME.has(binding.adapter)) {
+    console.warn(
+      `[chat-bot] Skipping "${binding.adapter}" binding — no runtime adapter available. ` +
+      `Schema is forward-compatible; runtime support will be added when the adapter package ships.`,
+    );
+    return null;
+  }
+
   if (binding.adapter === "linear") {
     const creds = binding.credentials as { apiKey?: string; clientId?: string; clientSecret?: string; accessToken?: string; webhookSecret: string; userName?: string };
     // Need at least one auth method + webhook secret
@@ -75,8 +84,6 @@ function createAdapterForBinding(binding: ChatPlatformBinding): Adapter | null {
     return createLinearAdapter(adapterConfig as Parameters<typeof createLinearAdapter>[0]);
   }
 
-  // GitHub and other adapters: not yet implemented at runtime
-  // Schema is forward-compatible; runtime support added when adapter packages are available
   return null;
 }
 

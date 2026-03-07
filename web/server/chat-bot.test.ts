@@ -561,6 +561,35 @@ describe("ChatBot", () => {
       expect(result).toBe(false);
     });
 
+    it("returns false for agents with only unsupported adapter bindings (e.g. github)", () => {
+      // GitHub adapter has no runtime implementation yet. An agent that only
+      // has a GitHub binding should not get a runtime, and its webhook should 404.
+      const executor = createMockExecutor();
+      const wsBridge = createMockWsBridge();
+      const bot = new ChatBot(executor as any, wsBridge as any);
+
+      const agent = makeAgent({
+        id: "agent-github",
+        triggers: {
+          chat: {
+            enabled: true,
+            platforms: [{
+              adapter: "github",
+              autoSubscribe: true,
+              credentials: {
+                token: "ghp_test_token",
+                webhookSecret: "github-webhook-secret",
+              },
+            }],
+          },
+        },
+      });
+      const result = bot.initializeAgentRuntime(agent);
+
+      expect(result).toBe(false);
+      expect(bot.getWebhookHandler("agent-github", "github")).toBeNull();
+    });
+
     it("getWebhookHandler returns handler for initialized agent", () => {
       // After initializeAgentRuntime succeeds, getWebhookHandler should return
       // the webhook handler function for the agent's platform.

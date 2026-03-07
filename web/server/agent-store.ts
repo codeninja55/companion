@@ -9,7 +9,7 @@ import {
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
-import type { AgentConfig, AgentConfigCreateInput, ChatPlatformBinding } from "./agent-types.js";
+import type { AgentConfig, AgentConfigCreateInput } from "./agent-types.js";
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
@@ -52,24 +52,6 @@ function maskSecret(value: string): string {
   return value.substring(0, 4) + "****";
 }
 
-/**
- * Auto-generate webhookSecret for any chat platform binding that has credentials
- * but is missing a webhookSecret.
- */
-function ensureChatWebhookSecrets(
-  platforms: ChatPlatformBinding[] | undefined,
-): ChatPlatformBinding[] | undefined {
-  if (!platforms) return platforms;
-  return platforms.map((p) => {
-    if (p.credentials && !("webhookSecret" in p.credentials && p.credentials.webhookSecret)) {
-      return {
-        ...p,
-        credentials: { ...p.credentials, webhookSecret: generateWebhookSecret() },
-      };
-    }
-    return p;
-  });
-}
 
 /**
  * Return a copy of the agent with secret credential fields masked.
@@ -172,14 +154,6 @@ export function createAgent(data: AgentConfigCreateInput): AgentConfig {
     triggers.webhook = { ...triggers.webhook, secret: generateWebhookSecret() };
   }
 
-  // Auto-generate webhookSecret for chat platform bindings with credentials
-  if (triggers?.chat?.platforms) {
-    triggers.chat = {
-      ...triggers.chat,
-      platforms: ensureChatWebhookSecrets(triggers.chat.platforms) || [],
-    };
-  }
-
   const now = Date.now();
   const agent: AgentConfig = {
     ...data,
@@ -232,13 +206,6 @@ export function updateAgent(
         };
       });
     }
-    mergedUpdates.triggers = {
-      ...mergedUpdates.triggers,
-      chat: {
-        ...mergedUpdates.triggers.chat,
-        platforms: ensureChatWebhookSecrets(mergedUpdates.triggers.chat.platforms) || [],
-      },
-    };
   }
 
   const agent: AgentConfig = {

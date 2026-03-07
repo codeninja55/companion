@@ -2390,9 +2390,9 @@ describe("AgentsPage", () => {
     expect(screen.getByLabelText("Linear Bot Username")).toBeInTheDocument();
   });
 
-  it("chat credential inputs render for GitHub adapter with correct aria-labels", async () => {
-    // When the adapter is switched to GitHub, the GitHub-specific credential
-    // fields should render instead of Linear fields.
+  it("GitHub adapter shows 'coming soon' message instead of credential fields", async () => {
+    // GitHub adapter has no runtime implementation yet. Credential fields
+    // should not render — only a "coming soon" message.
     mockApi.listAgents.mockResolvedValue([]);
     render(<AgentsPage route={defaultRoute} />);
     await waitFor(() => {
@@ -2407,21 +2407,15 @@ describe("AgentsPage", () => {
     const select = screen.getByDisplayValue("Linear");
     fireEvent.change(select, { target: { value: "github" } });
 
-    // GitHub credential section should be visible
-    expect(screen.getByText("GitHub Credentials")).toBeInTheDocument();
-    expect(screen.queryByText("Linear Credentials")).not.toBeInTheDocument();
-
-    // All GitHub credential inputs should have accessible labels
-    expect(screen.getByLabelText("GitHub Personal Access Token")).toBeInTheDocument();
-    expect(screen.getByLabelText("GitHub App ID")).toBeInTheDocument();
-    expect(screen.getByLabelText("GitHub App Private Key")).toBeInTheDocument();
-    expect(screen.getByLabelText("GitHub Webhook Secret")).toBeInTheDocument();
-    expect(screen.getByLabelText("GitHub Bot Username")).toBeInTheDocument();
+    // Should show "coming soon" message, not credential fields
+    expect(screen.getByText(/GitHub adapter coming soon/)).toBeInTheDocument();
+    expect(screen.queryByText("GitHub Credentials")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("GitHub Personal Access Token")).not.toBeInTheDocument();
   });
 
   it("Slack/Discord adapters show 'coming soon' message instead of credential fields", async () => {
-    // Slack and Discord adapters don't have credential inputs yet, so they
-    // should show a placeholder message instead.
+    // Slack and Discord adapters don't have runtime implementations yet,
+    // so they should show a placeholder message instead of credential fields.
     mockApi.listAgents.mockResolvedValue([]);
     render(<AgentsPage route={defaultRoute} />);
     await waitFor(() => {
@@ -2435,7 +2429,7 @@ describe("AgentsPage", () => {
     // Switch to Slack
     const select = screen.getByDisplayValue("Linear");
     fireEvent.change(select, { target: { value: "slack" } });
-    expect(screen.getByText("Slack adapter coming soon.")).toBeInTheDocument();
+    expect(screen.getByText(/Slack adapter coming soon/)).toBeInTheDocument();
     expect(screen.queryByText("Linear Credentials")).not.toBeInTheDocument();
   });
 
@@ -2525,8 +2519,9 @@ describe("AgentsPage", () => {
     expect(webhookInput.value).toBe("new_linear_signing_secret");
   });
 
-  it("webhook secret field is editable for GitHub platform", async () => {
-    // GitHub also generates its own webhook secret, so the field must be editable.
+  it("GitHub platform shows coming soon when editing agent with github credentials", async () => {
+    // An agent saved with github credentials should show "coming soon"
+    // when editing, since the GitHub adapter has no runtime yet.
     const agent = makeAgent({
       id: "gh-ws-edit",
       name: "GH WS Edit Agent",
@@ -2555,12 +2550,9 @@ describe("AgentsPage", () => {
     await screen.findByText("GH WS Edit Agent");
     fireEvent.click(screen.getByTitle("Edit"));
 
-    const webhookInput = screen.getByLabelText("GitHub Webhook Secret") as HTMLInputElement;
-    expect(webhookInput.value).toBe("gh_old_secret");
-    expect(webhookInput.readOnly).toBeFalsy();
-
-    fireEvent.change(webhookInput, { target: { value: "new_gh_secret" } });
-    expect(webhookInput.value).toBe("new_gh_secret");
+    // Should show "coming soon" rather than credential fields
+    expect(screen.getByText(/GitHub adapter coming soon/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("GitHub Webhook Secret")).not.toBeInTheDocument();
   });
 
   it("shows placeholder instead of masked dots for configured webhook secret", async () => {
