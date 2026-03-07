@@ -30,7 +30,7 @@ import { registerProviderRoutes } from "./routes/provider-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerRemoteRoutes } from "./routes/remote-routes.js";
-import { registerChatWebhookRoutes, registerChatProtectedRoutes } from "./routes/chat-routes.js";
+import { registerChatWebhookRoutes, registerAgentChatWebhookRoutes, registerChatProtectedRoutes } from "./routes/chat-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerPushRoutes } from "./routes/push-routes.js";
@@ -148,7 +148,8 @@ export function createRoutes(
   // ─── Chat SDK webhook routes (exempt from auth middleware) ────────
   // Platform adapters handle their own signature verification (e.g., Linear HMAC).
   if (chatBot) {
-    registerChatWebhookRoutes(api, chatBot);
+    registerChatWebhookRoutes(api, chatBot);          // legacy global (deprecated)
+    registerAgentChatWebhookRoutes(api, chatBot);     // agent-scoped webhooks
   }
 
   // ─── Auth middleware (protects all routes below) ───────────────────
@@ -1767,7 +1768,7 @@ export function createRoutes(
   registerPushRoutes(api, getPushManager());
   registerSkillRoutes(api);
   registerCronRoutes(api, cronScheduler);
-  registerAgentRoutes(api, agentExecutor);
+  registerAgentRoutes(api, agentExecutor, chatBot);
   registerRemoteRoutes(api);
   registerMcpConfigRoutes(api);
   registerAddDirsRoutes(api);
