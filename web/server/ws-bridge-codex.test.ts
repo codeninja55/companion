@@ -128,6 +128,7 @@ describe("attachCodexAdapterHandlers", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -884,6 +885,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1052,6 +1054,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1090,6 +1093,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1193,6 +1197,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: false,  // disabled
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1315,6 +1320,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: false,  // disabled
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });

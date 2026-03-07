@@ -32,6 +32,7 @@ export interface CompanionSettings {
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
   defaultPermissionMode: PermissionMode;
+  publicUrl: string;
   updateChannel: UpdateChannel;
   updatedAt: number;
 }
@@ -55,6 +56,7 @@ let settings: CompanionSettings = {
   aiValidationAutoApprove: true,
   aiValidationAutoDeny: true,
   defaultPermissionMode: "plan",
+  publicUrl: "",
   updateChannel: "stable",
   updatedAt: 0,
 };
@@ -80,6 +82,7 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     defaultPermissionMode: VALID_PERMISSION_MODES.includes(raw?.defaultPermissionMode as PermissionMode)
       ? (raw!.defaultPermissionMode as PermissionMode)
       : "plan",
+    publicUrl: typeof raw?.publicUrl === "string" ? raw.publicUrl.trim().replace(/\/+$/, "") : "",
     updateChannel: raw?.updateChannel === "prerelease" ? "prerelease" : "stable",
     updatedAt: typeof raw?.updatedAt === "number" ? raw.updatedAt : 0,
   };
@@ -109,7 +112,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "anthropicApiKey" | "anthropicModel" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "defaultPermissionMode" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "anthropicApiKey" | "anthropicModel" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "defaultPermissionMode" | "publicUrl" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -127,6 +130,7 @@ export function updateSettings(
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? settings.aiValidationAutoApprove,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? settings.aiValidationAutoDeny,
     defaultPermissionMode: patch.defaultPermissionMode ?? settings.defaultPermissionMode,
+    publicUrl: patch.publicUrl ?? settings.publicUrl,
     updateChannel: patch.updateChannel ?? settings.updateChannel,
     updatedAt: Date.now(),
   });
