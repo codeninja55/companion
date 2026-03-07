@@ -20,6 +20,7 @@ import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
 import type { RecorderManager } from "./recorder.js";
 import { resolveSessionGitInfo } from "./session-git-info.js";
+import { clearUsageLimitsCache } from "./usage-limits.js";
 import type {
   Session,
   SocketData,
@@ -1074,6 +1075,9 @@ export class WsBridge {
   }
 
   private handleAuthStatus(session: Session, msg: CLIAuthStatusMessage) {
+    if (msg.error) {
+      clearUsageLimitsCache();
+    }
     this.broadcastToBrowsers(session, {
       type: "auth_status",
       isAuthenticating: msg.isAuthenticating,
@@ -1238,7 +1242,7 @@ export class WsBridge {
 
   private handleUserMessage(
     session: Session,
-    msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] }
+    msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[]; pdfs?: { media_type: string; data: string }[] }
   ) {
     // Store user message in history for replay with stable ID for dedup on reconnect
     const ts = Date.now();
@@ -1249,15 +1253,27 @@ export class WsBridge {
       id: `user-${ts}-${this.userMsgCounter++}`,
     });
 
-    // Build content: if images are present, use content block array; otherwise plain string
+    // Build content: if images or PDFs are present, use content block array; otherwise plain string
+    const hasImages = msg.images && msg.images.length > 0;
+    const hasPdfs = msg.pdfs && msg.pdfs.length > 0;
     let content: string | unknown[];
-    if (msg.images?.length) {
+    if (hasImages || hasPdfs) {
       const blocks: unknown[] = [];
-      for (const img of msg.images) {
-        blocks.push({
-          type: "image",
-          source: { type: "base64", media_type: img.media_type, data: img.data },
-        });
+      if (msg.images) {
+        for (const img of msg.images) {
+          blocks.push({
+            type: "image",
+            source: { type: "base64", media_type: img.media_type, data: img.data },
+          });
+        }
+      }
+      if (msg.pdfs) {
+        for (const pdf of msg.pdfs) {
+          blocks.push({
+            type: "document",
+            source: { type: "base64", media_type: pdf.media_type, data: pdf.data },
+          });
+        }
       }
       blocks.push({ type: "text", text: msg.content });
       content = blocks;

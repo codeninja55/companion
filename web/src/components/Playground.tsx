@@ -294,6 +294,33 @@ const MSG_USER_IMAGE: ChatMessage = {
   timestamp: Date.now() - 55000,
 };
 
+const MSG_USER_DOCS: ChatMessage = {
+  id: "msg-2b",
+  role: "user",
+  content: "[report.pdf]:\n\nCan you summarize this report and the spreadsheet data?",
+  documents: [
+    { name: "report.pdf", sizeBytes: 245760 },
+    { name: "data.xlsx", sizeBytes: 51200 },
+  ],
+  timestamp: Date.now() - 52000,
+};
+
+const MSG_USER_MIXED: ChatMessage = {
+  id: "msg-2c",
+  role: "user",
+  content: "Here's the DICOM scan and my clinical notes",
+  images: [
+    {
+      media_type: "image/png",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==",
+    },
+  ],
+  documents: [
+    { name: "clinical-notes.md", sizeBytes: 4096 },
+  ],
+  timestamp: Date.now() - 50000,
+};
+
 const MSG_ASSISTANT: ChatMessage = {
   id: "msg-3",
   role: "assistant",
@@ -989,6 +1016,12 @@ export function Playground() {
             </Card>
             <Card label="User message with image">
               <MessageBubble message={MSG_USER_IMAGE} />
+            </Card>
+            <Card label="User message with document attachments">
+              <MessageBubble message={MSG_USER_DOCS} />
+            </Card>
+            <Card label="User message with mixed image + document">
+              <MessageBubble message={MSG_USER_MIXED} />
             </Card>
             <Card label="Assistant message (markdown)">
               <MessageBubble message={MSG_ASSISTANT} />

@@ -19,6 +19,8 @@ export interface ChatMessage {
   content: string;
   contentBlocks?: ContentBlock[];
   images?: { media_type: string; data: string }[];
+  /** Document/PDF attachment metadata for display in user message bubbles */
+  documents?: { name: string; sizeBytes?: number }[];
   timestamp: number;
   parentToolUseId?: string | null;
   isStreaming?: boolean;
