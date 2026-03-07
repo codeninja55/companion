@@ -5,6 +5,9 @@ import {
   copyFileSync,
   cpSync,
   realpathSync,
+  openSync,
+  readSync,
+  closeSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +25,30 @@ import {
 } from "./codex-home.js";
 import * as sshManager from "./ssh-manager.js";
 import * as profileManager from "./remote-profile-manager.js";
+import { getOAuthCredentials } from "./usage-limits.js";
 import { getMcpConfigFilePath, getMcpConfig } from "./mcp-config-manager.js";
+
+/** Check if a file is a native executable (Mach-O or ELF) by reading magic bytes. */
+function isNativeBinary(filePath: string): boolean {
+  try {
+    const fd = openSync(filePath, "r");
+    const buf = Buffer.alloc(4);
+    readSync(fd, buf, 0, 4, 0);
+    closeSync(fd);
+    const magic = buf.readUInt32BE(0);
+    return (
+      magic === 0xfeedface || // MH_MAGIC (Mach-O 32-bit, big-endian)
+      magic === 0xcefaedfe || // MH_CIGAM (Mach-O 32-bit, little-endian)
+      magic === 0xfeedfacf || // MH_MAGIC_64 (Mach-O 64-bit, big-endian)
+      magic === 0xcffaedfe || // MH_CIGAM_64 (Mach-O 64-bit, little-endian on ARM64)
+      magic === 0xcafebabe || // FAT_MAGIC (Mach-O fat/universal)
+      magic === 0xbebafeca || // FAT_CIGAM (Mach-O fat, reversed)
+      magic === 0x7f454c46    // ELF
+    );
+  } catch {
+    return false;
+  }
+}
 
 /** Whether WebSocket transport is enabled for Codex sessions. */
 function isCodexWsTransportEnabled(): boolean {
@@ -503,7 +529,7 @@ export class CliLauncher {
    * Spawn Claude Code on a remote machine via SSH reverse tunnel.
    * The remote CLI connects back to the local Companion server through the tunnel.
    */
-  private spawnRemoteCLI(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): void {
+  private async spawnRemoteCLI(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): Promise<void> {
     const connId = options.remoteConnectionId;
     if (!connId) {
       console.error(`[cli-launcher] No remoteConnectionId for session ${sessionId}`);
@@ -531,8 +557,30 @@ export class CliLauncher {
       return;
     }
 
+    // Build env vars to forward to the remote: API key or OAuth credentials
+    const envVars: Record<string, string> = {};
+    if (process.env.ANTHROPIC_API_KEY) {
+      envVars.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    } else {
+      // No API key — forward local OAuth credentials so the remote doesn't need its own login
+      const oauth = await getOAuthCredentials();
+      if (oauth) {
+        envVars.CLAUDE_CODE_OAUTH_TOKEN = oauth.accessToken;
+        envVars.CLAUDE_CODE_OAUTH_REFRESH_TOKEN = oauth.refreshToken;
+        if (oauth.scopes) {
+          envVars.CLAUDE_CODE_OAUTH_SCOPES = oauth.scopes;
+        }
+      }
+    }
+    // Forward provider env vars if set
+    if (options.env) {
+      for (const [k, v] of Object.entries(options.env)) {
+        if (v !== undefined) envVars[k] = v;
+      }
+    }
+
     const remoteCwd = options.remoteCwd || "~";
-    const spawnCmd = sshManager.buildRemoteLaunchCommand(conn, profile, sessionId, this.port, remoteCwd);
+    const spawnCmd = sshManager.buildRemoteLaunchCommand(conn, profile, sessionId, this.port, remoteCwd, envVars);
 
     console.log(
       `[cli-launcher] Spawning remote session ${sessionId} via SSH: ${sanitizeSpawnArgsForLog(spawnCmd)}`,
@@ -906,14 +954,10 @@ export class CliLauncher {
       const enrichedPath = getEnrichedPath();
       const spawnPath = [binaryDir, ...enrichedPath.split(":")].filter(Boolean).join(":");
 
-      if (existsSync(siblingNode)) {
-        let codexScript: string;
-        try {
-          codexScript = realpathSync(binary);
-        } catch {
-          codexScript = binary;
-        }
-        spawnCmd = [siblingNode, codexScript, ...args];
+      const resolvedBinary = (() => { try { return realpathSync(binary); } catch { return binary; } })();
+      if (existsSync(siblingNode) && !isNativeBinary(resolvedBinary)) {
+        // npm-installed Codex: run JS entry point through sibling node
+        spawnCmd = [siblingNode, resolvedBinary, ...args];
       } else {
         spawnCmd = [binary, ...args];
       }
@@ -1133,14 +1177,10 @@ export class CliLauncher {
       const enrichedPath = getEnrichedPath();
       const spawnPath = [binaryDir, ...enrichedPath.split(":")].filter(Boolean).join(":");
 
-      if (existsSync(siblingNode)) {
-        let codexScript: string;
-        try {
-          codexScript = realpathSync(binary);
-        } catch {
-          codexScript = binary;
-        }
-        spawnCmd = [siblingNode, codexScript, ...args];
+      const resolvedBinary = (() => { try { return realpathSync(binary); } catch { return binary; } })();
+      if (existsSync(siblingNode) && !isNativeBinary(resolvedBinary)) {
+        // npm-installed Codex: run JS entry point through sibling node
+        spawnCmd = [siblingNode, resolvedBinary, ...args];
       } else {
         spawnCmd = [binary, ...args];
       }

@@ -55,6 +55,7 @@ describe("buildRemoteLaunchCommand", () => {
       "/home/user/project",
     );
 
+    // SSH transport args
     expect(args[0]).toBe("ssh");
     expect(args).toContain("-o");
     expect(args).toContain("ExitOnForwardFailure=yes");
@@ -65,9 +66,14 @@ describe("buildRemoteLaunchCommand", () => {
     expect(args).toContain("-i");
     expect(args).toContain("/home/user/.ssh/id_rsa");
     expect(args).toContain("admin@192.168.1.100");
-    expect(args).toContain("claude");
-    expect(args).toContain("--sdk-url");
-    expect(args).toContain("ws://localhost:9500/ws/cli/session-123");
+
+    // Remote command is a single arg wrapping the full invocation
+    const remoteCmd = args[args.length - 1];
+    expect(remoteCmd).toContain("${SHELL:-bash}");
+    expect(remoteCmd).toContain("cd ");
+    expect(remoteCmd).toContain("/home/user/project");
+    expect(remoteCmd).toContain("claude");
+    expect(remoteCmd).toContain("--sdk-url ws://localhost:9500/ws/cli/session-123");
   });
 
   it("builds command without -i for password auth", () => {
@@ -89,7 +95,7 @@ describe("buildRemoteLaunchCommand", () => {
     expect(args).toContain("admin@192.168.1.100");
   });
 
-  it("includes cd for remote cwd", () => {
+  it("includes cd and claude in a single remote command arg", () => {
     const conn = makeConn();
     const args = buildRemoteLaunchCommand(
       conn,
@@ -99,10 +105,65 @@ describe("buildRemoteLaunchCommand", () => {
       "/home/user/project",
     );
 
-    const cdIdx = args.indexOf("cd");
-    expect(cdIdx).toBeGreaterThan(-1);
-    expect(args[cdIdx + 1]).toBe("/home/user/project");
-    expect(args[cdIdx + 2]).toBe("&&");
+    // Everything after user@host is a single SSH arg to avoid && splitting
+    const userHostIdx = args.indexOf("admin@192.168.1.100");
+    expect(args.length).toBe(userHostIdx + 2); // user@host + single remote cmd
+    const remoteCmd = args[args.length - 1];
+    expect(remoteCmd).toContain("cd ");
+    expect(remoteCmd).toContain("/home/user/project");
+    expect(remoteCmd).toContain("&& ");
+    expect(remoteCmd).toContain("claude");
+  });
+
+  it("uses $SHELL -lc to invoke the remote command", () => {
+    const conn = makeConn();
+    const args = buildRemoteLaunchCommand(
+      conn,
+      testProfile,
+      "session-shell",
+      4567,
+      "/workspace",
+    );
+
+    // Single remote arg wraps everything in exec "$SHELL" -lc '...'
+    const remoteCmd = args[args.length - 1];
+    expect(remoteCmd).toMatch(/exec "\$\{SHELL:-bash\}" -lc '/);
+  });
+
+  it("forwards env vars as shell-escaped prefix", () => {
+    const conn = makeConn();
+    const args = buildRemoteLaunchCommand(
+      conn,
+      testProfile,
+      "session-env",
+      4567,
+      "/workspace",
+      { ANTHROPIC_API_KEY: "sk-test-123", MY_VAR: "hello" },
+    );
+
+    const remoteCmd = args[args.length - 1];
+    expect(remoteCmd).toContain("ANTHROPIC_API_KEY=");
+    expect(remoteCmd).toContain("sk-test-123");
+    expect(remoteCmd).toContain("MY_VAR=");
+    expect(remoteCmd).toContain("hello");
+  });
+
+  it("shell-escapes single quotes in env var values", () => {
+    const conn = makeConn();
+    const args = buildRemoteLaunchCommand(
+      conn,
+      testProfile,
+      "session-escape",
+      4567,
+      "/workspace",
+      { TOKEN: "it's-a-test" },
+    );
+
+    const remoteCmd = args[args.length - 1];
+    // The value is double-escaped: once for the inner -lc arg, once for the env var
+    expect(remoteCmd).toContain("TOKEN=");
+    expect(remoteCmd).toContain("it");
+    expect(remoteCmd).toContain("s-a-test");
   });
 
   it("rejects invalid host in profile", () => {
