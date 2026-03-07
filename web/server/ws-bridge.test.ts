@@ -4,6 +4,9 @@ const mockExecSync = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execSync: mockExecSync }));
 vi.mock("node:crypto", () => ({ randomUUID: () => "test-uuid" }));
 
+const mockClearUsageLimitsCache = vi.hoisted(() => vi.fn());
+vi.mock("./usage-limits.js", () => ({ clearUsageLimitsCache: mockClearUsageLimitsCache }));
+
 import { WsBridge, type SocketData } from "./ws-bridge.js";
 import { SessionStore } from "./session-store.js";
 import { containerManager } from "./container-manager.js";
@@ -1935,6 +1938,40 @@ describe("auth_status message routing", () => {
     expect(authMsg.isAuthenticating).toBe(false);
     expect(authMsg.error).toBe("Token expired");
     expect(authMsg.output).toEqual(["Failed to authenticate"]);
+  });
+
+  it("clears usage-limits cache when auth_status has an error", () => {
+    // When the CLI reports an auth error (e.g. after account switch),
+    // the cached usage data is stale and must be invalidated.
+    mockClearUsageLimitsCache.mockClear();
+
+    const msg = JSON.stringify({
+      type: "auth_status",
+      isAuthenticating: false,
+      output: ["Auth failed"],
+      error: "Rate limited on old account",
+      uuid: "uuid-auth-cache",
+      session_id: "s1",
+    });
+
+    bridge.handleCLIMessage(cli, msg);
+    expect(mockClearUsageLimitsCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not clear usage-limits cache when auth_status has no error", () => {
+    // Normal auth status (no error) should not invalidate the cache.
+    mockClearUsageLimitsCache.mockClear();
+
+    const msg = JSON.stringify({
+      type: "auth_status",
+      isAuthenticating: false,
+      output: ["Authentication complete"],
+      uuid: "uuid-auth-ok",
+      session_id: "s1",
+    });
+
+    bridge.handleCLIMessage(cli, msg);
+    expect(mockClearUsageLimitsCache).not.toHaveBeenCalled();
   });
 });
 

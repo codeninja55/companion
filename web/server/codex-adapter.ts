@@ -886,7 +886,7 @@ export class CodexAdapter {
   // ── Outgoing message handlers ───────────────────────────────────────────
 
   private async handleOutgoingUserMessage(
-    msg: { type: "user_message"; content: string; images?: { media_type: string; data: string }[] },
+    msg: { type: "user_message"; content: string; images?: { media_type: string; data: string }[]; pdfs?: { media_type: string; data: string }[] },
   ): Promise<void> {
     if (!this.threadId) {
       this.emit({ type: "error", message: "No Codex thread started yet" });
@@ -905,8 +905,18 @@ export class CodexAdapter {
       }
     }
 
+    // Codex does not support document content blocks natively.
+    // If PDFs are attached, note them in the text content.
+    let textContent = msg.content;
+    if (msg.pdfs?.length) {
+      const pdfNote = msg.pdfs.length === 1
+        ? "[1 PDF document attached — Codex does not support native document blocks]"
+        : `[${msg.pdfs.length} PDF documents attached — Codex does not support native document blocks]`;
+      textContent = `${pdfNote}\n\n${textContent}`;
+    }
+
     // Add text
-    input.push({ type: "text", text: msg.content });
+    input.push({ type: "text", text: textContent });
 
     try {
       // Only send collaborationMode on mode transitions — sending it every turn

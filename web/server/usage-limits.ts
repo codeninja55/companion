@@ -21,6 +21,11 @@ const OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CACHE_DURATION_MS = 60 * 1000;
 let cache: { data: UsageLimits; timestamp: number } | null = null;
 
+/** Clear the in-memory usage-limits cache so the next poll reads fresh credentials. */
+export function clearUsageLimitsCache(): void {
+  cache = null;
+}
+
 interface OAuthCredentials {
   accessToken: string;
   refreshToken: string;
@@ -30,7 +35,8 @@ interface OAuthCredentials {
 
 function readRawCredentials(): { raw: string; parsed: Record<string, unknown>; oauth: OAuthCredentials } | null {
   try {
-    if (process.platform === "win32") {
+    // Windows and Linux: read from ~/.claude/.credentials.json
+    if (process.platform !== "darwin") {
       const home =
         process.env.USERPROFILE || process.env.HOME || homedir() || "";
       const credPath = join(home, ".claude", ".credentials.json");
@@ -41,6 +47,7 @@ function readRawCredentials(): { raw: string; parsed: Record<string, unknown>; o
       return { raw, parsed, oauth: parsed.claudeAiOauth };
     }
 
+    // macOS: read from Keychain
     const raw = execSync(
       'security find-generic-password -s "Claude Code-credentials" -w',
       { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] },
@@ -61,12 +68,14 @@ function readRawCredentials(): { raw: string; parsed: Record<string, unknown>; o
 function writeCredentials(creds: Record<string, unknown>): void {
   try {
     const json = JSON.stringify(creds);
-    if (process.platform === "win32") {
+    if (process.platform !== "darwin") {
+      // Windows and Linux: write to ~/.claude/.credentials.json
       const home =
         process.env.USERPROFILE || process.env.HOME || homedir() || "";
       const credPath = join(home, ".claude", ".credentials.json");
       require("node:fs").writeFileSync(credPath, json, "utf-8");
     } else {
+      // macOS: write to Keychain
       execFileSync(
         "security",
         ["add-generic-password", "-U", "-s", "Claude Code-credentials", "-a", "Claude Code", "-w", json],
@@ -108,6 +117,33 @@ async function refreshAccessToken(refreshToken: string): Promise<{
 export function getCredentials(): string | null {
   const creds = readRawCredentials();
   return creds?.oauth.accessToken ?? null;
+}
+
+export async function getOAuthCredentials(): Promise<{ accessToken: string; refreshToken: string; scopes: string } | null> {
+  const creds = readRawCredentials();
+  if (!creds) return null;
+  const { oauth } = creds;
+  if (!oauth.accessToken || !oauth.refreshToken) return null;
+
+  let accessToken = oauth.accessToken;
+
+  // Refresh if expired (with 5min buffer)
+  if (!oauth.expiresAt || Date.now() >= oauth.expiresAt - 5 * 60 * 1000) {
+    const refreshed = await refreshAccessToken(oauth.refreshToken);
+    if (refreshed) {
+      accessToken = refreshed.accessToken;
+      creds.parsed.claudeAiOauth = {
+        ...oauth,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        expiresAt: Date.now() + refreshed.expiresIn * 1000,
+      };
+      writeCredentials(creds.parsed);
+    }
+  }
+
+  const scopes = (oauth.scopes as string[] | undefined)?.join(",") ?? "";
+  return { accessToken, refreshToken: oauth.refreshToken, scopes };
 }
 
 async function getValidAccessToken(): Promise<string | null> {

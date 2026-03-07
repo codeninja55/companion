@@ -1,11 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { captureException } from "../analytics.js";
 import { MessageFeed } from "./MessageFeed.js";
-import { Composer } from "./Composer.js";
+import { Composer, type ComposerHandle } from "./Composer.js";
 import { PermissionBanner } from "./PermissionBanner.js";
 import { AiValidationBadge } from "./AiValidationBadge.js";
+import { useDropZone } from "../utils/use-drop-zone.js";
+import { DropZoneOverlay } from "./DropZoneOverlay.js";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
   const sessionPerms = useStore((s) => s.pendingPermissions.get(sessionId));
@@ -20,8 +22,22 @@ export function ChatView({ sessionId }: { sessionId: string }) {
     [sessionPerms]
   );
 
+  const composerRef = useRef<ComposerHandle>(null);
+
+  const handleFilesDropped = useCallback((files: File[]) => {
+    composerRef.current?.addFiles(files);
+  }, []);
+
+  const { isDragging, dropZoneProps } = useDropZone({
+    onFilesDropped: handleFilesDropped,
+    enabled: cliConnected,
+  });
+
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 relative" {...dropZoneProps}>
+      {/* Drop zone overlay */}
+      {isDragging && <DropZoneOverlay />}
+
       {/* CLI disconnected banner */}
       {connStatus === "connected" && !cliConnected && (
         <div className="px-4 py-2 bg-cc-warning/10 border-b border-cc-warning/20 text-center flex items-center justify-center gap-3">
@@ -68,7 +84,7 @@ export function ChatView({ sessionId }: { sessionId: string }) {
       )}
 
       {/* Composer */}
-      <Composer sessionId={sessionId} />
+      <Composer ref={composerRef} sessionId={sessionId} />
     </div>
   );
 }

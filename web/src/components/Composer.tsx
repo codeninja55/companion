@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import { useStore } from "../store.js";
 import { sendToSession } from "../ws.js";
 import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
@@ -8,7 +8,7 @@ import { ModelSwitcher } from "./ModelSwitcher.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { useMentionMenu } from "../utils/use-mention-menu.js";
 
-import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
+import { processFiles, FILE_INPUT_ACCEPT, type FileAttachment } from "../utils/file-attachments.js";
 
 let idCounter = 0;
 
@@ -17,9 +17,14 @@ interface CommandItem {
   type: "command" | "skill";
 }
 
-export function Composer({ sessionId }: { sessionId: string }) {
+export interface ComposerHandle {
+  addFiles: (files: File[]) => void;
+}
+
+export const Composer = forwardRef<ComposerHandle, { sessionId: string }>(
+  function Composer({ sessionId }, ref) {
   const [text, setText] = useState("");
-  const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
   const [savePromptOpen, setSavePromptOpen] = useState(false);
@@ -46,6 +51,19 @@ export function Composer({ sessionId }: { sessionId: string }) {
     cwd: sessionData?.cwd,
     enabled: !slashMenuOpen,
   });
+
+  // Imperative handle for drop zone integration
+  const handleFilesAdded = useCallback(async (files: File[]) => {
+    const { attachments: processed, errors } = await processFiles(files);
+    if (errors.length > 0) {
+      console.warn("[Composer] File processing errors:", errors);
+    }
+    if (processed.length > 0) {
+      setAttachments((prev) => [...prev, ...processed]);
+    }
+  }, []);
+
+  useImperativeHandle(ref, () => ({ addFiles: handleFilesAdded }), [handleFilesAdded]);
 
   // Build command list from session data
   const allCommands = useMemo<CommandItem[]>(() => {
@@ -133,12 +151,35 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const msg = text.trim();
     if (!msg || !isConnected) return;
 
+    // Split attachments by kind
+    const imageAttachments = attachments.filter((a) => a.kind === "image" || a.kind === "dicom");
+    const pdfAttachments = attachments.filter((a) => a.kind === "pdf");
+    const docAttachments = attachments.filter((a) => a.kind === "document");
+
+    // Build the content string: prepend extracted document text
+    let content = msg;
+    if (docAttachments.length > 0) {
+      const docParts = docAttachments.map(
+        (a) => `[${a.originalName}]:\n${a.extractedText ?? ""}`
+      );
+      content = docParts.join("\n\n") + "\n\n" + msg;
+    }
+
+    // Build the message payload
+    const images = imageAttachments.length > 0
+      ? imageAttachments.map((a) => ({ media_type: a.mediaType, data: a.base64 }))
+      : undefined;
+    const pdfs = pdfAttachments.length > 0
+      ? pdfAttachments.map((a) => ({ media_type: a.mediaType, data: a.base64 }))
+      : undefined;
+
     // Send the message to the CLI
     sendToSession(sessionId, {
       type: "user_message",
-      content: msg,
+      content,
       session_id: sessionId,
-      images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+      images,
+      pdfs,
     });
 
     // If the user sent /clear, clear the local message history to match the CLI
@@ -148,14 +189,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
       useStore.getState().appendMessage(sessionId, {
         id: `user-${Date.now()}-${++idCounter}`,
         role: "user",
-        content: msg,
-        images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+        content,
+        images,
+        documents: docAttachments.length > 0 || pdfAttachments.length > 0
+          ? [...docAttachments, ...pdfAttachments].map((a) => ({ name: a.originalName, sizeBytes: a.sizeBytes }))
+          : undefined,
         timestamp: Date.now(),
       });
     }
 
     setText("");
-    setImages([]);
+    setAttachments([]);
     setSlashMenuOpen(false);
     mention.setMentionMenuOpen(false);
 
@@ -265,34 +309,29 @@ export function Composer({ sessionId }: { sessionId: string }) {
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files) return;
-    const newImages: ImageAttachment[] = [];
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith("image/")) continue;
-      const { base64, mediaType } = await readFileAsBase64(file);
-      newImages.push({ name: file.name, base64, mediaType });
-    }
-    setImages((prev) => [...prev, ...newImages]);
+    await handleFilesAdded(Array.from(files));
     e.target.value = "";
   }
 
-  function removeImage(index: number) {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handlePaste(e: React.ClipboardEvent) {
     const items = e.clipboardData?.items;
     if (!items) return;
-    const newImages: ImageAttachment[] = [];
+    const files: File[] = [];
     for (const item of Array.from(items)) {
       if (!item.type.startsWith("image/")) continue;
       const file = item.getAsFile();
       if (!file) continue;
-      const { base64, mediaType } = await readFileAsBase64(file);
-      newImages.push({ name: `pasted-${Date.now()}.${file.type.split("/")[1]}`, base64, mediaType });
+      // Create a file with a name since pasted files often have no name
+      const named = new File([file], `pasted-${Date.now()}.${file.type.split("/")[1]}`, { type: file.type });
+      files.push(named);
     }
-    if (newImages.length > 0) {
+    if (files.length > 0) {
       e.preventDefault();
-      setImages((prev) => [...prev, ...newImages]);
+      await handleFilesAdded(files);
     }
   }
 
@@ -363,19 +402,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
   return (
     <div className="shrink-0 px-0 sm:px-6 pt-0 sm:pt-3 pb-5 sm:pb-4 bg-cc-input-bg sm:bg-transparent">
       <div className="max-w-3xl mx-auto">
-        {/* Image thumbnails */}
-        {images.length > 0 && (
+        {/* Attachment preview strip */}
+        {attachments.length > 0 && (
           <div className="flex items-center gap-2 mb-2 px-3 sm:px-0 flex-wrap">
-            {images.map((img, i) => (
+            {attachments.map((att, i) => (
               <div key={i} className="relative group">
-                <img
-                  src={`data:${img.mediaType};base64,${img.base64}`}
-                  alt={img.name}
-                  className="w-12 h-12 rounded-lg object-cover border border-cc-border"
-                />
+                <AttachmentPreview attachment={att} />
                 <button
-                  onClick={() => removeImage(i)}
-                  aria-label="Remove image"
+                  onClick={() => removeAttachment(i)}
+                  aria-label={`Remove ${att.kind === "image" || att.kind === "dicom" ? "image" : "file"}`}
                   className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
@@ -391,11 +426,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={FILE_INPUT_ACCEPT}
           multiple
           onChange={handleFileSelect}
           className="hidden"
-          aria-label="Attach images"
+          aria-label="Attach files"
         />
 
         {/* Input container: flat separator on mobile, card on desktop */}
@@ -571,12 +606,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                   : "text-cc-muted opacity-30 cursor-not-allowed"
               }`}
-              title="Upload image"
+              title="Attach file"
             >
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                <rect x="2" y="2" width="12" height="12" rx="2" />
-                <circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none" />
-                <path d="M2 11l3-3 2 2 3-4 4 5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M8 3v10M3 8h10" strokeLinecap="round" />
               </svg>
             </button>
           </div>
@@ -635,7 +668,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
           {/* Desktop action bar: + bookmark mode spacer model send (hidden on mobile) */}
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 pb-2">
-            {/* + button (image upload) */}
+            {/* + button (file upload) */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={!isConnected}
@@ -644,7 +677,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                   : "text-cc-muted opacity-30 cursor-not-allowed"
               }`}
-              title="Attach image"
+              title="Attach file"
             >
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                 <path d="M8 3v10M3 8h10" strokeLinecap="round" />
@@ -722,6 +755,34 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
         </div>
       </div>
+    </div>
+  );
+});
+
+/** Renders the appropriate preview for an attachment based on its kind. */
+function AttachmentPreview({ attachment }: { attachment: FileAttachment }) {
+  if (attachment.kind === "image" || attachment.kind === "dicom") {
+    return (
+      <img
+        src={`data:${attachment.mediaType};base64,${attachment.base64}`}
+        alt={attachment.name}
+        className="w-12 h-12 rounded-lg object-cover border border-cc-border"
+      />
+    );
+  }
+
+  // PDF or document: show a file icon with extension label
+  const ext = attachment.originalName.split(".").pop()?.toUpperCase() ?? "FILE";
+  return (
+    <div
+      className="w-12 h-12 rounded-lg border border-cc-border bg-cc-card flex flex-col items-center justify-center gap-0.5"
+      title={attachment.originalName}
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className="w-5 h-5 text-cc-muted">
+        <path d="M4 2h5.5L13 5.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
+        <path d="M9 2v4h4" />
+      </svg>
+      <span className="text-[8px] font-bold text-cc-muted leading-none">{ext}</span>
     </div>
   );
 }

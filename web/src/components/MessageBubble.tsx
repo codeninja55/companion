@@ -79,6 +79,7 @@ function mapToolUsesById(blocks: ContentBlock[]): Map<string, ToolUseInfo> {
 function UserMessage({ message }: { message: ChatMessage }) {
   const [copied, setCopied] = useState(false);
   const hasImages = message.images && message.images.length > 0;
+  const hasDocuments = message.documents && message.documents.length > 0;
 
   return (
     <div className="flex justify-end animate-[fadeSlideIn_0.2s_ease-out] group">
@@ -117,6 +118,23 @@ function UserMessage({ message }: { message: ChatMessage }) {
                   alt="attachment"
                   className="w-16 h-16 rounded-lg object-cover border border-white/10"
                 />
+              ))}
+            </div>
+          )}
+          {hasDocuments && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {message.documents!.map((doc, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 text-[11px] font-medium"
+                  title={doc.sizeBytes ? `${(doc.sizeBytes / 1024).toFixed(1)}KB` : undefined}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className="w-3 h-3">
+                    <path d="M4 2h5.5L13 5.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
+                    <path d="M9 2v4h4" />
+                  </svg>
+                  {doc.name}
+                </span>
               ))}
             </div>
           )}

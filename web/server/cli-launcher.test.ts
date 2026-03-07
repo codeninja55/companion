@@ -461,6 +461,66 @@ describe("launch", () => {
     rmSync(tmpBinDir, { recursive: true, force: true });
   });
 
+  it("skips sibling node when codex binary is a native Mach-O ARM64 executable", () => {
+    // When Codex is installed via Homebrew Cask, the symlink sits next to a
+    // Homebrew-installed `node`. The launcher must detect that the resolved
+    // binary is a native executable (Mach-O) and run it directly.
+    // ARM64 Mach-O stores magic in little-endian: bytes on disk are CF FA ED FE
+    // which readUInt32BE sees as 0xCFFAEDFE (MH_CIGAM_64).
+    const tmpBinDir = mkdtempSync(join(tmpdir(), "codex-native-test-"));
+    const fakeCodex = join(tmpBinDir, "codex");
+    const fakeNode = join(tmpBinDir, "node");
+    const { writeFileSync: realWriteFileSync } = require("node:fs");
+    const machoHeader = Buffer.alloc(16);
+    machoHeader.writeUInt32LE(0xfeedfacf, 0); // little-endian = real ARM64 layout
+    realWriteFileSync(fakeCodex, machoHeader);
+    realWriteFileSync(fakeNode, "#!/bin/sh\n");
+
+    mockResolveBinary.mockReturnValue(fakeCodex);
+    mockSpawn.mockReturnValueOnce(createMockCodexProc());
+
+    launcher.launch({
+      backendType: "codex",
+      cwd: "/tmp/project",
+      codexSandbox: "workspace-write",
+    });
+
+    const [cmdAndArgs] = mockSpawn.mock.calls[0];
+    // Native binary should be invoked directly, NOT through sibling node
+    expect(cmdAndArgs[0]).toBe(fakeCodex);
+    expect(cmdAndArgs).toContain("app-server");
+
+    rmSync(tmpBinDir, { recursive: true, force: true });
+  });
+
+  it("skips sibling node when codex binary is an ELF executable", () => {
+    // Same scenario but with an ELF binary (Linux native)
+    const tmpBinDir = mkdtempSync(join(tmpdir(), "codex-elf-test-"));
+    const fakeCodex = join(tmpBinDir, "codex");
+    const fakeNode = join(tmpBinDir, "node");
+    const { writeFileSync: realWriteFileSync } = require("node:fs");
+    // Write an ELF magic header (0x7F454C46 = \x7fELF)
+    const elfHeader = Buffer.alloc(16);
+    elfHeader.writeUInt32BE(0x7f454c46, 0);
+    realWriteFileSync(fakeCodex, elfHeader);
+    realWriteFileSync(fakeNode, "#!/bin/sh\n");
+
+    mockResolveBinary.mockReturnValue(fakeCodex);
+    mockSpawn.mockReturnValueOnce(createMockCodexProc());
+
+    launcher.launch({
+      backendType: "codex",
+      cwd: "/tmp/project",
+      codexSandbox: "workspace-write",
+    });
+
+    const [cmdAndArgs] = mockSpawn.mock.calls[0];
+    expect(cmdAndArgs[0]).toBe(fakeCodex);
+    expect(cmdAndArgs).toContain("app-server");
+
+    rmSync(tmpBinDir, { recursive: true, force: true });
+  });
+
   it("sets state=exited and exitCode=127 when codex binary not found", () => {
     mockResolveBinary.mockReturnValue(null);
 

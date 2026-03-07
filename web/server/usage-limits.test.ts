@@ -269,6 +269,60 @@ describe("getUsageLimits", () => {
 });
 
 // ===========================================================================
+// clearUsageLimitsCache
+// ===========================================================================
+describe("clearUsageLimitsCache", () => {
+  const EMPTY = { five_hour: null, seven_day: null, extra_usage: null };
+
+  it("forces next getUsageLimits call to re-fetch instead of using cache", async () => {
+    // Populate the cache
+    mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
+    mockFetch.mockReturnValue(makeFetchResponse(SAMPLE_LIMITS));
+    await mod.getUsageLimits();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Clear the cache
+    mod.clearUsageLimitsCache();
+
+    // Next call should fetch again (not use cache)
+    const updated = {
+      ...SAMPLE_LIMITS,
+      five_hour: { utilization: 80, resets_at: null },
+    };
+    mockFetch.mockReturnValue(makeFetchResponse(updated));
+    const result = await mod.getUsageLimits();
+    expect(result).toEqual(updated);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("is safe to call when cache is already empty", async () => {
+    // No prior fetch — cache is null
+    mod.clearUsageLimitsCache();
+
+    mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
+    mockFetch.mockReturnValue(makeFetchResponse(SAMPLE_LIMITS));
+    const result = await mod.getUsageLimits();
+    expect(result).toEqual(SAMPLE_LIMITS);
+  });
+
+  it("does not cause a recursive fetch loop on repeated calls", async () => {
+    // Populate cache, then clear it multiple times
+    mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
+    mockFetch.mockReturnValue(makeFetchResponse(SAMPLE_LIMITS));
+    await mod.getUsageLimits();
+
+    mod.clearUsageLimitsCache();
+    mod.clearUsageLimitsCache();
+    mod.clearUsageLimitsCache();
+
+    // Only one additional fetch should happen (not three)
+    mockFetch.mockReturnValue(makeFetchResponse(SAMPLE_LIMITS));
+    await mod.getUsageLimits();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ===========================================================================
 // Token refresh flow (via getUsageLimits → getValidAccessToken)
 // ===========================================================================
 describe("token refresh", () => {
@@ -337,5 +391,52 @@ describe("token refresh", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url] = mockFetch.mock.calls[0];
     expect(url).toContain("oauth/usage");
+  });
+});
+
+// ===========================================================================
+// getOAuthCredentials
+// ===========================================================================
+describe("getOAuthCredentials", () => {
+  it("returns access token and refresh token from valid credentials", async () => {
+    mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
+    const result = await mod.getOAuthCredentials();
+    expect(result).not.toBeNull();
+    expect(result!.accessToken).toBe(SAMPLE_TOKEN);
+    expect(result!.refreshToken).toBe("sk-ant-ort01-fake-refresh-token");
+    expect(result!.scopes).toBe("");
+  });
+
+  it("returns null when no credentials are available", async () => {
+    mockExecSync.mockImplementation(() => { throw new Error("not found"); });
+    const result = await mod.getOAuthCredentials();
+    expect(result).toBeNull();
+  });
+
+  it("refreshes expired token before returning", async () => {
+    mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN, { expired: true }));
+    mockFetch.mockReturnValueOnce(
+      makeFetchResponse({
+        access_token: "sk-ant-refreshed",
+        refresh_token: "sk-ant-new-refresh",
+        expires_in: 3600,
+      }),
+    );
+
+    const result = await mod.getOAuthCredentials();
+    expect(result).not.toBeNull();
+    expect(result!.accessToken).toBe("sk-ant-refreshed");
+    // Credentials should have been written back
+    expect(mockExecFileSync).toHaveBeenCalled();
+  });
+
+  it("returns original token when refresh fails for expired credentials", async () => {
+    mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN, { expired: true }));
+    mockFetch.mockReturnValueOnce(makeFetchResponse({}, false));
+
+    const result = await mod.getOAuthCredentials();
+    // Still returns the original (expired) token — caller can try using it
+    expect(result).not.toBeNull();
+    expect(result!.accessToken).toBe(SAMPLE_TOKEN);
   });
 });

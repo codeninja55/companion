@@ -20,6 +20,13 @@ vi.mock("../utils/image.js", () => ({
   readFileAsBase64: (...args: unknown[]) => mockReadFileAsBase64(...args),
 }));
 
+const mockProcessFiles = vi.fn();
+
+vi.mock("../utils/file-attachments.js", () => ({
+  processFiles: (...args: unknown[]) => mockProcessFiles(...args),
+  FILE_INPUT_ACCEPT: "image/*,.dcm,.md,.pdf,.docx,.xlsx,.pptx",
+}));
+
 vi.mock("../ws.js", () => ({
   sendToSession: (...args: unknown[]) => mockSendToSession(...args),
 }));
@@ -125,6 +132,7 @@ beforeEach(() => {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   });
+  mockProcessFiles.mockResolvedValue({ attachments: [], errors: [] });
   setupMockStore();
 });
 
@@ -767,24 +775,24 @@ describe("Composer save prompt", () => {
 // ─── Toolbar interactions ────────────────────────────────────────────────────
 
 describe("Composer toolbar interactions", () => {
-  it("mobile upload image button triggers file input", () => {
-    // Validates the mobile upload image button opens the file picker via hidden input.
+  it("mobile attach file button triggers file input", () => {
+    // Validates the mobile attach file button opens the file picker via hidden input.
     const { container } = render(<Composer sessionId="s1" />);
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     const clickSpy = vi.spyOn(fileInput, "click");
-    // There are two upload image buttons (mobile + desktop); click the one titled "Upload image" (mobile)
-    const uploadBtn = screen.getByTitle("Upload image");
-    fireEvent.click(uploadBtn);
+    // There are two attach file buttons (mobile + desktop); click the first one (mobile)
+    const attachBtns = screen.getAllByTitle("Attach file");
+    fireEvent.click(attachBtns[0]);
     expect(clickSpy).toHaveBeenCalled();
   });
 
-  it("desktop attach image button triggers file input", () => {
-    // Validates the desktop attach image button opens the file picker via hidden input.
+  it("desktop attach file button triggers file input", () => {
+    // Validates the desktop attach file button opens the file picker via hidden input.
     const { container } = render(<Composer sessionId="s1" />);
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     const clickSpy = vi.spyOn(fileInput, "click");
-    const attachBtn = screen.getByTitle("Attach image");
-    fireEvent.click(attachBtn);
+    const attachBtns = screen.getAllByTitle("Attach file");
+    fireEvent.click(attachBtns[attachBtns.length - 1]);
     expect(clickSpy).toHaveBeenCalled();
   });
 
@@ -866,10 +874,20 @@ describe("Composer toolbar interactions", () => {
 
 // ─── Image attachment ────────────────────────────────────────────────────────
 
-describe("Composer image attachment", () => {
+describe("Composer file attachment", () => {
   it("file input adds image thumbnails and remove button works", async () => {
     // Validates the file select handler processes images and renders thumbnails.
-    mockReadFileAsBase64.mockResolvedValue({ base64: "abc123", mediaType: "image/png" });
+    mockProcessFiles.mockResolvedValue({
+      attachments: [{
+        name: "test.png",
+        base64: "abc123",
+        mediaType: "image/png",
+        kind: "image",
+        originalName: "test.png",
+        sizeBytes: 1024,
+      }],
+      errors: [],
+    });
     const { container } = render(<Composer sessionId="s1" />);
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
 
@@ -878,7 +896,7 @@ describe("Composer image attachment", () => {
     Object.defineProperty(fileInput, "files", { value: [file], writable: false });
     fireEvent.change(fileInput);
 
-    // Wait for async readFileAsBase64 to complete
+    // Wait for async processFiles to complete
     await waitFor(() => {
       expect(screen.getByAltText("test.png")).toBeTruthy();
     });
@@ -886,5 +904,148 @@ describe("Composer image attachment", () => {
     // Remove the image
     fireEvent.click(screen.getByLabelText("Remove image"));
     expect(screen.queryByAltText("test.png")).toBeFalsy();
+  });
+
+  it("file input shows document preview for PDF attachments", async () => {
+    // Validates that PDF files render a file icon with extension label.
+    mockProcessFiles.mockResolvedValue({
+      attachments: [{
+        name: "report.pdf",
+        base64: "pdfdata",
+        mediaType: "application/pdf",
+        kind: "pdf",
+        originalName: "report.pdf",
+        sizeBytes: 2048,
+      }],
+      errors: [],
+    });
+    const { container } = render(<Composer sessionId="s1" />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    Object.defineProperty(fileInput, "files", { value: [file], writable: false });
+    fireEvent.change(fileInput);
+
+    // PDF attachments should show the extension label
+    await waitFor(() => {
+      expect(screen.getByText("PDF")).toBeTruthy();
+    });
+
+    // Remove the file
+    fireEvent.click(screen.getByLabelText("Remove file"));
+    expect(screen.queryByText("PDF")).toBeFalsy();
+  });
+
+  it("sends PDFs in the pdfs field of the message payload", async () => {
+    // Validates that PDF attachments are sent as separate pdfs field.
+    mockProcessFiles.mockResolvedValue({
+      attachments: [{
+        name: "doc.pdf",
+        base64: "pdfbase64",
+        mediaType: "application/pdf",
+        kind: "pdf",
+        originalName: "doc.pdf",
+        sizeBytes: 4096,
+      }],
+      errors: [],
+    });
+    const { container } = render(<Composer sessionId="s1" />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["pdf"], "doc.pdf", { type: "application/pdf" });
+    Object.defineProperty(fileInput, "files", { value: [file], writable: false });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => expect(screen.getByText("PDF")).toBeTruthy());
+
+    // Type text and send
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "Check this PDF" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      type: "user_message",
+      content: "Check this PDF",
+      pdfs: [{ media_type: "application/pdf", data: "pdfbase64" }],
+    }));
+  });
+
+  it("sends document text prepended to content for .docx attachments", async () => {
+    // Validates that document attachments have extracted text prepended to content.
+    mockProcessFiles.mockResolvedValue({
+      attachments: [{
+        name: "notes.docx",
+        base64: "docbase64",
+        mediaType: "text/plain",
+        kind: "document",
+        originalName: "notes.docx",
+        sizeBytes: 8192,
+        extractedText: "Hello from the document",
+      }],
+      errors: [],
+    });
+    const { container } = render(<Composer sessionId="s1" />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["docx"], "notes.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    Object.defineProperty(fileInput, "files", { value: [file], writable: false });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => expect(screen.getByText("DOCX")).toBeTruthy());
+
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "Summarize this" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      type: "user_message",
+      content: "[notes.docx]:\nHello from the document\n\nSummarize this",
+    }));
+  });
+
+  it("handles mixed image + document attachments", async () => {
+    // Validates that mixed attachments split correctly: images in images field, PDFs in pdfs field.
+    mockProcessFiles.mockResolvedValueOnce({
+      attachments: [{
+        name: "photo.png",
+        base64: "imgdata",
+        mediaType: "image/png",
+        kind: "image",
+        originalName: "photo.png",
+        sizeBytes: 1024,
+      }],
+      errors: [],
+    }).mockResolvedValueOnce({
+      attachments: [{
+        name: "spec.pdf",
+        base64: "pdfdata",
+        mediaType: "application/pdf",
+        kind: "pdf",
+        originalName: "spec.pdf",
+        sizeBytes: 2048,
+      }],
+      errors: [],
+    });
+    const { container } = render(<Composer sessionId="s1" />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    // Add image
+    Object.defineProperty(fileInput, "files", { value: [new File(["img"], "photo.png", { type: "image/png" })], writable: true });
+    fireEvent.change(fileInput);
+    await waitFor(() => expect(screen.getByAltText("photo.png")).toBeTruthy());
+
+    // Add PDF
+    Object.defineProperty(fileInput, "files", { value: [new File(["pdf"], "spec.pdf", { type: "application/pdf" })], writable: true });
+    fireEvent.change(fileInput);
+    await waitFor(() => expect(screen.getByText("PDF")).toBeTruthy());
+
+    // Send
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "Review both" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      type: "user_message",
+      content: "Review both",
+      images: [{ media_type: "image/png", data: "imgdata" }],
+      pdfs: [{ media_type: "application/pdf", data: "pdfdata" }],
+    }));
   });
 });
