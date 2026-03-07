@@ -35,6 +35,7 @@ import { RelayClient } from "./relay-client.js";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { getPushManager } from "./push-manager.js";
+import { restoreIfNeeded as restoreTailscaleFunnel, cleanup as cleanupTailscaleFunnel } from "./tailscale-manager.js";
 import { isRunningAsService } from "./service.js";
 import { getToken, verifyToken } from "./auth-manager.js";
 import { getCookie } from "hono/cookie";
@@ -108,17 +109,36 @@ wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
 
 // Auto-relaunch CLI when a browser connects to a session with no CLI
 const relaunchingSet = new Set<string>();
+const MAX_AUTO_RELAUNCHES = 3;
+const autoRelaunchCounts = new Map<string, number>();
 wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   if (relaunchingSet.has(sessionId)) return;
   const info = launcher.getSession(sessionId);
   if (info?.archived) return;
+
+  const count = autoRelaunchCounts.get(sessionId) ?? 0;
+  if (count >= MAX_AUTO_RELAUNCHES) {
+    console.warn(`[server] Auto-relaunch limit (${MAX_AUTO_RELAUNCHES}) reached for session ${sessionId}, giving up`);
+    wsBridge.broadcastToSession(sessionId, {
+      type: "error",
+      message: "Session keeps crashing. Please relaunch manually.",
+    });
+    return;
+  }
+
   if (info && info.state !== "starting") {
     relaunchingSet.add(sessionId);
-    console.log(`[server] Auto-relaunching CLI for session ${sessionId}`);
+    autoRelaunchCounts.set(sessionId, count + 1);
+    console.log(`[server] Auto-relaunching CLI for session ${sessionId} (attempt ${count + 1}/${MAX_AUTO_RELAUNCHES})`);
     try {
       const result = await launcher.relaunch(sessionId);
       if (!result.ok && result.error) {
         wsBridge.broadcastToSession(sessionId, { type: "error", message: result.error });
+      } else {
+        // Successful relaunch — reset counter so transient failures don't
+        // permanently exhaust the budget.  The counter only accumulates when
+        // the backend keeps dying in rapid succession.
+        autoRelaunchCounts.delete(sessionId);
       }
     } finally {
       setTimeout(() => relaunchingSet.delete(sessionId), 5000);
@@ -162,7 +182,7 @@ if (recorder.isGloballyEnabled()) {
 const app = new Hono();
 
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, chatEnabled ? chatBot : undefined));
+app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, chatEnabled ? chatBot : undefined, port));
 
 // Dynamic manifest — embeds auth token in start_url so PWA auto-authenticates
 // on first launch. iOS gives standalone PWAs isolated storage from Safari,
@@ -327,6 +347,11 @@ agentExecutor.startAll();
 // ── Image pull manager — pre-pull missing Docker images for environments ────
 imagePullManager.initFromEnvironments();
 
+// ── Tailscale Funnel restoration ────────────────────────────────────────────
+restoreTailscaleFunnel(port).catch((err) => {
+  console.warn("[server] Tailscale Funnel restoration failed:", err);
+});
+
 // ── Update checker ──────────────────────────────────────────────────────────
 startPeriodicCheck();
 if (isRunningAsService()) {
@@ -338,6 +363,7 @@ if (isRunningAsService()) {
 function gracefulShutdown() {
   console.log("[server] Persisting container state before shutdown...");
   containerManager.persistState(CONTAINER_STATE_PATH);
+  cleanupTailscaleFunnel(port);
   process.exit(0);
 }
 process.on("SIGTERM", gracefulShutdown);

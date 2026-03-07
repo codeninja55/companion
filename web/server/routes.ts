@@ -30,11 +30,12 @@ import { registerProviderRoutes } from "./routes/provider-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerRemoteRoutes } from "./routes/remote-routes.js";
-import { registerChatWebhookRoutes, registerChatProtectedRoutes } from "./routes/chat-routes.js";
+import { registerChatWebhookRoutes, registerAgentChatWebhookRoutes, registerChatProtectedRoutes } from "./routes/chat-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerPushRoutes } from "./routes/push-routes.js";
 import { getPushManager } from "./push-manager.js";
+import { registerTailscaleRoutes } from "./routes/tailscale-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
@@ -70,6 +71,7 @@ export function createRoutes(
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
   agentExecutor?: import("./agent-executor.js").AgentExecutor,
   chatBot?: import("./chat-bot.js").ChatBot,
+  port?: number,
 ) {
   const api = new Hono();
 
@@ -148,7 +150,8 @@ export function createRoutes(
   // ─── Chat SDK webhook routes (exempt from auth middleware) ────────
   // Platform adapters handle their own signature verification (e.g., Linear HMAC).
   if (chatBot) {
-    registerChatWebhookRoutes(api, chatBot);
+    registerChatWebhookRoutes(api, chatBot);          // legacy global (deprecated)
+    registerAgentChatWebhookRoutes(api, chatBot);     // agent-scoped webhooks
   }
 
   // ─── Auth middleware (protects all routes below) ───────────────────
@@ -1752,6 +1755,10 @@ export function createRoutes(
   registerPromptRoutes(api);
   registerSettingsRoutes(api);
 
+  // ─── Tailscale ──────────────────────────────────────────────────────
+
+  if (port !== undefined) registerTailscaleRoutes(api, port);
+
   // ─── Linear ────────────────────────────────────────────────────────
 
   registerLinearRoutes(api);
@@ -1767,7 +1774,7 @@ export function createRoutes(
   registerPushRoutes(api, getPushManager());
   registerSkillRoutes(api);
   registerCronRoutes(api, cronScheduler);
-  registerAgentRoutes(api, agentExecutor);
+  registerAgentRoutes(api, agentExecutor, chatBot);
   registerRemoteRoutes(api);
   registerMcpConfigRoutes(api);
   registerAddDirsRoutes(api);

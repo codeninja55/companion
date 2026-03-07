@@ -3,6 +3,8 @@ import { api, type AgentInfo, type AgentExport, type AgentExecution, type McpSer
 import { getModelsForBackend, getDefaultModel, getAgentModesForBackend, getDefaultAgentMode } from "../utils/backends.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { timeAgo } from "../utils/time-ago.js";
+import { useStore } from "../store.js";
+import { PublicUrlBanner } from "./PublicUrlBanner.js";
 import type { Route } from "../utils/routing.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -54,6 +56,15 @@ interface AgentFormData {
     adapter: "linear" | "github" | "slack" | "discord";
     mentionPattern: string;
     autoSubscribe: boolean;
+    // Per-binding credentials (adapter-specific)
+    apiKey: string;         // Linear
+    clientId: string;       // Linear OAuth
+    clientSecret: string;   // Linear OAuth
+    webhookSecret: string;  // All platforms
+    userName: string;       // All platforms
+    token: string;          // GitHub PAT
+    appId: string;          // GitHub App
+    privateKey: string;     // GitHub App
   }>;
 }
 
@@ -180,9 +191,19 @@ function humanizeSchedule(expression: string, recurring: boolean): string {
   return expression;
 }
 
-function getWebhookUrl(agent: AgentInfo): string {
-  const base = window.location.origin;
+function getWebhookUrl(agent: AgentInfo, publicUrl: string): string {
+  const base = publicUrl || window.location.origin;
   return `${base}/api/agents/${encodeURIComponent(agent.id)}/webhook/${agent.triggers?.webhook?.secret || ""}`;
+}
+
+function getChatWebhookUrl(agentId: string, platform: string, publicUrl: string): string {
+  const base = publicUrl || window.location.origin;
+  return `${base}/api/agents/${encodeURIComponent(agentId)}/chat/webhooks/${encodeURIComponent(platform)}`;
+}
+
+/** Check if a credential value is a masked placeholder (from API sanitization) */
+function isMaskedValue(value: string): boolean {
+  return value.endsWith("****");
 }
 
 /** Count how many advanced features are configured */
@@ -198,6 +219,7 @@ function countAdvancedFeatures(form: AgentFormData): number {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function AgentsPage({ route }: Props) {
+  const publicUrl = useStore((s) => s.publicUrl);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"list" | "edit">("list");
@@ -276,6 +298,14 @@ export function AgentsPage({ route }: Props) {
         adapter: p.adapter,
         mentionPattern: p.mentionPattern || "",
         autoSubscribe: p.autoSubscribe ?? true,
+        apiKey: p.credentials?.apiKey || "",
+        clientId: p.credentials?.clientId || "",
+        clientSecret: p.credentials?.clientSecret || "",
+        webhookSecret: p.credentials?.webhookSecret || "",
+        userName: p.credentials?.userName || "",
+        token: p.credentials?.token || "",
+        appId: p.credentials?.appId || "",
+        privateKey: p.credentials?.privateKey || "",
       })),
     });
     setError("");
@@ -330,11 +360,31 @@ export function AgentsPage({ route }: Props) {
             enabled: form.chatEnabled,
             platforms: form.chatPlatforms
               .filter((p) => p.adapter)
-              .map((p) => ({
-                adapter: p.adapter,
-                mentionPattern: p.mentionPattern || undefined,
-                autoSubscribe: p.autoSubscribe,
-              })),
+              .map((p) => {
+                // Build credentials object — only include non-empty, non-masked values
+                const creds: Record<string, string> = {};
+                const addCred = (key: string, value: string) => {
+                  if (value && !isMaskedValue(value)) creds[key] = value;
+                };
+                if (p.adapter === "linear") {
+                  addCred("apiKey", p.apiKey);
+                  addCred("clientId", p.clientId);
+                  addCred("clientSecret", p.clientSecret);
+                } else if (p.adapter === "github") {
+                  addCred("token", p.token);
+                  addCred("appId", p.appId);
+                  addCred("privateKey", p.privateKey);
+                }
+                addCred("webhookSecret", p.webhookSecret);
+                addCred("userName", p.userName);
+                const hasCredentials = Object.keys(creds).length > 0;
+                return {
+                  adapter: p.adapter,
+                  mentionPattern: p.mentionPattern || undefined,
+                  autoSubscribe: p.autoSubscribe,
+                  ...(hasCredentials ? { credentials: creds } : {}),
+                };
+              }),
           },
         },
       };
@@ -426,7 +476,7 @@ export function AgentsPage({ route }: Props) {
   }
 
   function copyWebhookUrl(agent: AgentInfo) {
-    const url = getWebhookUrl(agent);
+    const url = getWebhookUrl(agent, publicUrl);
     navigator.clipboard.writeText(url).then(() => {
       setCopiedWebhook(agent.id);
       setTimeout(() => setCopiedWebhook(null), 2000);
@@ -450,6 +500,7 @@ export function AgentsPage({ route }: Props) {
       form={form}
       setForm={setForm}
       editingId={editingId}
+      publicUrl={publicUrl}
       error={error}
       saving={saving}
       onSave={handleSave}
@@ -495,6 +546,8 @@ export function AgentsPage({ route }: Props) {
           </div>
         )}
 
+        <PublicUrlBanner publicUrl={publicUrl} />
+
         {/* Agent Cards */}
         {loading ? (
           <div className="text-sm text-cc-muted">Loading...</div>
@@ -512,14 +565,19 @@ export function AgentsPage({ route }: Props) {
               <AgentCard
                 key={agent.id}
                 agent={agent}
+                publicUrl={publicUrl}
                 onEdit={() => startEdit(agent)}
                 onDelete={() => handleDelete(agent.id)}
                 onToggle={() => handleToggle(agent.id)}
                 onRun={() => handleRunClick(agent)}
                 onExport={() => handleExport(agent)}
                 onCopyWebhook={() => copyWebhookUrl(agent)}
+                onCopyChatWebhook={(key) => {
+                  setCopiedWebhook(key);
+                  setTimeout(() => setCopiedWebhook(null), 2000);
+                }}
                 onRegenerateSecret={() => handleRegenerateSecret(agent.id)}
-                copiedWebhook={copiedWebhook === agent.id}
+                copiedWebhook={copiedWebhook}
               />
             ))}
           </div>
@@ -570,24 +628,28 @@ export function AgentsPage({ route }: Props) {
 
 function AgentCard({
   agent,
+  publicUrl,
   onEdit,
   onDelete,
   onToggle,
   onRun,
   onExport,
   onCopyWebhook,
+  onCopyChatWebhook,
   onRegenerateSecret,
   copiedWebhook,
 }: {
   agent: AgentInfo;
+  publicUrl: string;
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
   onRun: () => void;
   onExport: () => void;
   onCopyWebhook: () => void;
+  onCopyChatWebhook: (key: string) => void;
   onRegenerateSecret: () => void;
-  copiedWebhook: boolean;
+  copiedWebhook: string | null;
 }) {
   const triggers: string[] = ["Manual"];
   if (agent.triggers?.webhook?.enabled) triggers.push("Webhook");
@@ -690,8 +752,25 @@ function AgentCard({
               className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors cursor-pointer"
               title="Copy webhook URL"
             >
-              {copiedWebhook ? "Copied!" : "Copy URL"}
+              {copiedWebhook === agent.id ? "Copied!" : "Copy URL"}
             </button>
+          )}
+          {agent.triggers?.chat?.enabled && agent.triggers.chat.platforms?.map((p) =>
+            p.credentials ? (
+              <button
+                key={p.adapter}
+                onClick={() => {
+                  const url = getChatWebhookUrl(agent.id, p.adapter, publicUrl);
+                  navigator.clipboard.writeText(url).then(() => {
+                    onCopyChatWebhook(`${agent.id}-${p.adapter}`);
+                  }).catch(() => {});
+                }}
+                className="px-2 py-0.5 text-[10px] rounded-full bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors cursor-pointer"
+                title={`Copy ${p.adapter} chat webhook URL`}
+              >
+                {copiedWebhook === `${agent.id}-${p.adapter}` ? "Copied!" : `${p.adapter} URL`}
+              </button>
+            ) : null,
           )}
         </div>
         <div className="flex items-center gap-3 text-[10px] text-cc-muted">
@@ -710,6 +789,7 @@ function AgentEditor({
   form,
   setForm,
   editingId,
+  publicUrl,
   error,
   saving,
   onSave,
@@ -718,6 +798,7 @@ function AgentEditor({
   form: AgentFormData;
   setForm: (f: AgentFormData | ((prev: AgentFormData) => AgentFormData)) => void;
   editingId: string | null;
+  publicUrl: string;
   error: string;
   saving: boolean;
   onSave: () => void;
@@ -1273,61 +1354,282 @@ function AgentEditor({
 
             {/* Chat platform config */}
             {form.chatEnabled && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-3">
                 <p className="text-[10px] text-cc-muted">
-                  Configure which platforms this agent responds on. Requires platform API keys set as environment variables.
+                  Configure which platforms this agent responds on. Enter credentials per platform below, or fall back to environment variables (deprecated).
                 </p>
 
                 {form.chatPlatforms.map((platform, idx) => (
-                  <div key={idx} className="flex items-center gap-2 flex-wrap">
-                    <select
-                      value={platform.adapter}
-                      onChange={(e) => {
-                        const updated = [...form.chatPlatforms];
-                        updated[idx] = { ...updated[idx], adapter: e.target.value as "linear" | "github" | "slack" | "discord" };
-                        updateField("chatPlatforms", updated);
-                      }}
-                      className="px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                    >
-                      <option value="linear">Linear</option>
-                      <option value="github">GitHub</option>
-                      <option value="slack">Slack</option>
-                      <option value="discord">Discord</option>
-                    </select>
-                    <input
-                      value={platform.mentionPattern}
-                      onChange={(e) => {
-                        const updated = [...form.chatPlatforms];
-                        updated[idx] = { ...updated[idx], mentionPattern: e.target.value };
-                        updateField("chatPlatforms", updated);
-                      }}
-                      placeholder="Mention pattern (regex, optional)"
-                      className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
-                    />
-                    <label className="flex items-center gap-1 text-[10px] text-cc-muted cursor-pointer whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={platform.autoSubscribe}
+                  <div key={idx} className="rounded-lg border border-cc-border/50 p-3 space-y-2">
+                    {/* Platform row: adapter, mention pattern, multi-turn, remove */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={platform.adapter}
                         onChange={(e) => {
                           const updated = [...form.chatPlatforms];
-                          updated[idx] = { ...updated[idx], autoSubscribe: e.target.checked };
+                          updated[idx] = { ...updated[idx], adapter: e.target.value as "linear" | "github" | "slack" | "discord" };
                           updateField("chatPlatforms", updated);
                         }}
+                        className="px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                      >
+                        <option value="linear">Linear</option>
+                        <option value="github">GitHub</option>
+                        <option value="slack">Slack</option>
+                        <option value="discord">Discord</option>
+                      </select>
+                      <input
+                        value={platform.mentionPattern}
+                        onChange={(e) => {
+                          const updated = [...form.chatPlatforms];
+                          updated[idx] = { ...updated[idx], mentionPattern: e.target.value };
+                          updateField("chatPlatforms", updated);
+                        }}
+                        placeholder="Mention pattern (regex, optional)"
+                        className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
                       />
-                      Multi-turn
-                    </label>
-                    <button
-                      onClick={() => {
-                        const updated = form.chatPlatforms.filter((_, i) => i !== idx);
-                        updateField("chatPlatforms", updated);
-                      }}
-                      className="text-cc-muted hover:text-red-400 transition-colors cursor-pointer"
-                      title="Remove platform"
-                    >
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                        <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z" />
-                      </svg>
-                    </button>
+                      <label className="flex items-center gap-1 text-[10px] text-cc-muted cursor-pointer whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={platform.autoSubscribe}
+                          onChange={(e) => {
+                            const updated = [...form.chatPlatforms];
+                            updated[idx] = { ...updated[idx], autoSubscribe: e.target.checked };
+                            updateField("chatPlatforms", updated);
+                          }}
+                        />
+                        Multi-turn
+                      </label>
+                      {/* Status indicator */}
+                      {platform.adapter === "linear" && (platform.apiKey || platform.clientId) && (
+                        <span className="w-2 h-2 rounded-full bg-cc-success flex-shrink-0" title="Credentials configured" />
+                      )}
+                      {platform.adapter === "github" && (platform.token || platform.appId) && (
+                        <span className="w-2 h-2 rounded-full bg-cc-success flex-shrink-0" title="Credentials configured" />
+                      )}
+                      <button
+                        onClick={() => {
+                          const updated = form.chatPlatforms.filter((_, i) => i !== idx);
+                          updateField("chatPlatforms", updated);
+                        }}
+                        className="text-cc-muted hover:text-red-400 transition-colors cursor-pointer"
+                        title="Remove platform"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                          <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Credentials section */}
+                    {platform.adapter === "linear" && (
+                      <div className="space-y-1.5 pl-2 border-l-2 border-cc-border/30">
+                        {/* Guided Linear setup */}
+                        <details open={!platform.apiKey && !platform.clientId} className="text-[10px] text-cc-muted">
+                          <summary className="font-medium cursor-pointer hover:text-cc-fg transition-colors select-none">
+                            Linear Chat Setup Guide
+                          </summary>
+                          <ol className="mt-1.5 space-y-1.5 list-decimal list-inside">
+                            <li>
+                              <strong>Create a Linear API Key</strong> &mdash;{" "}
+                              Go to <a href="https://linear.app/settings/api" target="_blank" rel="noopener noreferrer" className="text-cc-primary underline">linear.app/settings/api</a>,
+                              create a key, and paste it below.
+                            </li>
+                            <li>
+                              <strong>Save this agent</strong> &mdash; The webhook URL is generated on save.
+                            </li>
+                            <li>
+                              <strong>Create a Linear Webhook</strong> &mdash;{" "}
+                              In <a href="https://linear.app/settings/api" target="_blank" rel="noopener noreferrer" className="text-cc-primary underline">Linear &rarr; Settings &rarr; API &rarr; Webhooks</a>,
+                              create a webhook using the URL shown below. Enable <em>Comment</em> events (create, update).
+                              {!publicUrl && (
+                                <span className="block mt-0.5 text-amber-400">
+                                  No public URL configured &mdash; the webhook URL below uses your browser address which may not be reachable from Linear.{" "}
+                                  <a href="#/settings" className="underline hover:text-amber-300">Configure public URL</a>
+                                </span>
+                              )}
+                            </li>
+                            <li>
+                              <strong>Copy the signing secret</strong> &mdash; After creating the webhook in Linear, copy its signing secret and paste it into the Webhook Secret field below.
+                            </li>
+                            <li>
+                              <strong>Test it</strong> &mdash; Mention the bot username in a Linear issue comment.
+                            </li>
+                          </ol>
+                        </details>
+
+                        <p className="text-[10px] text-cc-muted font-medium">Linear Credentials</p>
+                        <input
+                          type="password"
+                          value={platform.apiKey}
+                          aria-label="Linear API Key"
+                          onChange={(e) => {
+                            const updated = [...form.chatPlatforms];
+                            updated[idx] = { ...updated[idx], apiKey: e.target.value };
+                            updateField("chatPlatforms", updated);
+                          }}
+                          placeholder={isMaskedValue(platform.apiKey) ? "Configured (enter new value to update)" : "API Key"}
+                          className="w-full px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                        />
+                        <div className="flex gap-1.5">
+                          <input
+                            type="password"
+                            value={platform.clientId}
+                            aria-label="Linear OAuth Client ID"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], clientId: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder="OAuth Client ID (alternative)"
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                          />
+                          <input
+                            type="password"
+                            value={platform.clientSecret}
+                            aria-label="Linear OAuth Client Secret"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], clientSecret: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder="OAuth Client Secret"
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                          />
+                        </div>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="password"
+                            value={isMaskedValue(platform.webhookSecret) ? "" : platform.webhookSecret}
+                            aria-label="Linear Webhook Secret"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], webhookSecret: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder={isMaskedValue(platform.webhookSecret) ? "Configured — paste new value to update" : "Paste signing secret from Linear"}
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                            title="Webhook signing secret (from Linear)"
+                          />
+                          <input
+                            value={platform.userName}
+                            aria-label="Linear Bot Username"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], userName: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder="Bot username (default: companion)"
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {platform.adapter === "github" && (
+                      <div className="space-y-1.5 pl-2 border-l-2 border-cc-border/30">
+                        <p className="text-[10px] text-cc-muted font-medium">GitHub Credentials</p>
+                        <input
+                          type="password"
+                          value={platform.token}
+                          aria-label="GitHub Personal Access Token"
+                          onChange={(e) => {
+                            const updated = [...form.chatPlatforms];
+                            updated[idx] = { ...updated[idx], token: e.target.value };
+                            updateField("chatPlatforms", updated);
+                          }}
+                          placeholder={isMaskedValue(platform.token) ? "Configured (enter new value to update)" : "Personal Access Token"}
+                          className="w-full px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                        />
+                        <div className="flex gap-1.5">
+                          <input
+                            value={platform.appId}
+                            aria-label="GitHub App ID"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], appId: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder="GitHub App ID (alternative)"
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                          />
+                          <input
+                            type="password"
+                            value={platform.privateKey}
+                            aria-label="GitHub App Private Key"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], privateKey: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder="App Private Key (PEM)"
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                          />
+                        </div>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="password"
+                            value={isMaskedValue(platform.webhookSecret) ? "" : platform.webhookSecret}
+                            aria-label="GitHub Webhook Secret"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], webhookSecret: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder={isMaskedValue(platform.webhookSecret) ? "Configured — paste new value to update" : "Paste webhook secret from GitHub"}
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs font-mono-code focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                            title="Webhook signing secret (from GitHub)"
+                          />
+                          <input
+                            value={platform.userName}
+                            aria-label="GitHub Bot Username"
+                            onChange={(e) => {
+                              const updated = [...form.chatPlatforms];
+                              updated[idx] = { ...updated[idx], userName: e.target.value };
+                              updateField("chatPlatforms", updated);
+                            }}
+                            placeholder="Bot username (default: companion)"
+                            className="flex-1 px-2 py-1.5 rounded-lg bg-cc-input-bg border border-cc-border text-cc-fg text-xs focus:outline-none focus:ring-1 focus:ring-cc-primary"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {(platform.adapter === "slack" || platform.adapter === "discord") && (
+                      <p className="text-[10px] text-cc-muted italic pl-2">
+                        {platform.adapter === "slack" ? "Slack" : "Discord"} adapter coming soon.
+                      </p>
+                    )}
+
+                    {/* Webhook URL (shown for saved agents with credentials) */}
+                    {editingId && (platform.apiKey || platform.clientId || platform.token || platform.appId) && (
+                      <div className="space-y-1 pl-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-cc-muted">Webhook URL:</span>
+                          <code className="text-[10px] text-cc-fg font-mono-code bg-cc-hover px-1.5 py-0.5 rounded truncate max-w-[300px]">
+                            {getChatWebhookUrl(editingId, platform.adapter, publicUrl)}
+                          </code>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(getChatWebhookUrl(editingId, platform.adapter, publicUrl));
+                            }}
+                            className="text-[10px] text-cc-primary hover:text-cc-primary/80 cursor-pointer"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        {/* HTTPS warning for Linear */}
+                        {platform.adapter === "linear" && !getChatWebhookUrl(editingId, platform.adapter, publicUrl).startsWith("https://") && (
+                          <p className="text-[10px] text-amber-400">
+                            Linear requires HTTPS webhook URLs.{" "}
+                            {!publicUrl ? (
+                              <a href="#/settings" className="underline hover:text-amber-300">Configure a public HTTPS URL in Settings</a>
+                            ) : (
+                              <span>Your public URL must use HTTPS.</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -1335,7 +1637,7 @@ function AgentEditor({
                   onClick={() => {
                     updateField("chatPlatforms", [
                       ...form.chatPlatforms,
-                      { adapter: "linear" as const, mentionPattern: "", autoSubscribe: true },
+                      { adapter: "linear" as const, mentionPattern: "", autoSubscribe: true, apiKey: "", clientId: "", clientSecret: "", webhookSecret: "", userName: "", token: "", appId: "", privateKey: "" },
                     ]);
                   }}
                   className="flex items-center gap-1 text-xs text-cc-primary hover:text-cc-primary/80 cursor-pointer transition-colors"

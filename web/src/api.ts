@@ -395,6 +395,19 @@ export interface EditorStartResult {
   message?: string;
 }
 
+/** Keep in sync with web/server/tailscale-manager.ts TailscaleStatus */
+export interface TailscaleStatus {
+  installed: boolean;
+  binaryPath: string | null;
+  connected: boolean;
+  dnsName: string | null;
+  funnelActive: boolean;
+  funnelUrl: string | null;
+  error: string | null;
+  needsOperatorMode?: boolean;
+  warning?: string;
+}
+
 export interface AppSettings {
   anthropicApiKeyConfigured: boolean;
   anthropicModel: string;
@@ -407,6 +420,7 @@ export interface AppSettings {
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
+  publicUrl: string;
   updateChannel: "stable" | "prerelease";
   defaultPermissionMode?: string;
 }
@@ -611,6 +625,23 @@ export interface AgentInfo {
         adapter: "linear" | "github" | "slack" | "discord";
         mentionPattern?: string;
         autoSubscribe: boolean;
+        /** Per-binding credentials (masked in API responses) */
+        credentials?: {
+          // Linear
+          apiKey?: string;
+          clientId?: string;
+          clientSecret?: string;
+          accessToken?: string;
+          // GitHub
+          token?: string;
+          appId?: string;
+          privateKey?: string;
+          installationId?: string;
+          botUserId?: string;
+          // Common
+          webhookSecret?: string;
+          userName?: string;
+        };
       }>;
     };
   };
@@ -939,10 +970,17 @@ export const api = {
     linearArchiveTransitionStateId?: string;
     linearArchiveTransitionStateName?: string;
     editorTabEnabled?: boolean;
+    publicUrl?: string;
     updateChannel?: "stable" | "prerelease";
   }) => put<AppSettings>("/settings", data),
   verifyAnthropicKey: (apiKey: string) =>
     post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
+
+  // Tailscale
+  getTailscaleStatus: () => get<TailscaleStatus>("/tailscale/status"),
+  startTailscaleFunnel: () => post<TailscaleStatus>("/tailscale/funnel/start"),
+  stopTailscaleFunnel: () => post<TailscaleStatus>("/tailscale/funnel/stop"),
+
   searchLinearIssues: (query: string, limit = 8) =>
     get<{ issues: LinearIssue[] }>(
       `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,

@@ -84,6 +84,7 @@ vi.mock("./settings-manager.js", () => ({
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
     defaultPermissionMode: "plan",
+    publicUrl: "",
     updateChannel: "stable",
     updatedAt: 0,
   })),
@@ -101,6 +102,7 @@ vi.mock("./settings-manager.js", () => ({
     aiValidationEnabled: patch.aiValidationEnabled ?? false,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? true,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? true,
+    publicUrl: patch.publicUrl ?? "",
     updateChannel: patch.updateChannel ?? "stable",
     updatedAt: Date.now(),
   })),
@@ -1578,6 +1580,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1615,6 +1618,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1645,6 +1649,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1723,6 +1728,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2090,6 +2096,7 @@ describe("GET /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -2111,6 +2118,7 @@ describe("GET /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
     });
   });
@@ -2131,6 +2139,7 @@ describe("GET /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -2152,8 +2161,38 @@ describe("GET /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
     });
+  });
+
+  // Verifies publicUrl is included in GET response when set to a non-empty value
+  it("includes publicUrl in response when configured", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
+      publicUrl: "https://example.com",
+      updateChannel: "stable",
+      updatedAt: 100,
+    });
+
+    const res = await app.request("/api/settings", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.publicUrl).toBe("https://example.com");
   });
 });
 
@@ -2174,6 +2213,7 @@ describe("PUT /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 456,
     });
@@ -2216,6 +2256,7 @@ describe("PUT /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
     });
   });
@@ -2236,6 +2277,7 @@ describe("PUT /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 789,
     });
@@ -2274,6 +2316,7 @@ describe("PUT /api/settings", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 999,
     });
@@ -2355,6 +2398,72 @@ describe("PUT /api/settings", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toEqual({ error: "updateChannel must be 'stable' or 'prerelease'" });
+  });
+
+  // Verifies that PUT /api/settings accepts a publicUrl string and passes
+  // it (trimmed, trailing-slash-stripped) to updateSettings
+  it("accepts and saves publicUrl string", async () => {
+    vi.mocked(settingsManager.updateSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      defaultPermissionMode: "plan",
+      publicUrl: "https://my-server.com",
+      updateChannel: "stable",
+      updatedAt: 500,
+    });
+
+    const res = await app.request("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicUrl: "  https://my-server.com///  " }),
+    });
+
+    expect(res.status).toBe(200);
+    // The route trims whitespace and strips trailing slashes before calling updateSettings
+    expect(settingsManager.updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicUrl: "https://my-server.com",
+      }),
+    );
+    const json = await res.json();
+    expect(json.publicUrl).toBe("https://my-server.com");
+  });
+
+  // Rejects non-string publicUrl values with a 400 error
+  it("returns 400 for non-string publicUrl", async () => {
+    const res = await app.request("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicUrl: 123 }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "publicUrl must be a string" });
+  });
+
+  // Rejects publicUrl values that are not valid http/https URLs
+  it("returns 400 for publicUrl with invalid scheme", async () => {
+    const res = await app.request("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicUrl: "ftp://bad-scheme.com" }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "publicUrl must be a valid http/https URL" });
   });
 
   it("returns 400 when no settings fields are provided", async () => {
@@ -2480,6 +2589,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2506,6 +2616,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2586,6 +2697,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2673,6 +2785,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2725,6 +2838,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2751,6 +2865,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2800,6 +2915,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2831,6 +2947,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2861,6 +2978,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2892,6 +3010,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2958,6 +3077,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3003,6 +3123,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3029,6 +3150,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3086,6 +3208,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3112,6 +3235,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3184,6 +3308,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });

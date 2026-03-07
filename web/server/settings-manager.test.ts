@@ -39,6 +39,7 @@ describe("settings-manager", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -86,6 +87,7 @@ describe("settings-manager", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -140,6 +142,7 @@ describe("settings-manager", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -238,5 +241,49 @@ describe("settings-manager", () => {
     updateSettings({ defaultPermissionMode: "acceptEdits" });
     const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
     expect(updated.defaultPermissionMode).toBe("acceptEdits");
+  });
+
+  // ─── publicUrl tests ────────────────────────────────────────────────────────
+
+  // Default settings include publicUrl as empty string
+  it("default settings include publicUrl as empty string", () => {
+    expect(getSettings().publicUrl).toBe("");
+  });
+
+  // updateSettings saves publicUrl when a valid URL is provided
+  it("saves publicUrl via updateSettings", () => {
+    const updated = updateSettings({ publicUrl: "https://example.com" });
+    expect(updated.publicUrl).toBe("https://example.com");
+
+    const saved = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    expect(saved.publicUrl).toBe("https://example.com");
+  });
+
+  // updateSettings strips trailing slashes from publicUrl
+  it("strips trailing slashes from publicUrl", () => {
+    const updated = updateSettings({ publicUrl: "https://example.com///" });
+    expect(updated.publicUrl).toBe("https://example.com");
+  });
+
+  // Missing publicUrl in raw JSON on disk normalizes to empty string
+  it("normalizes missing publicUrl in raw JSON to empty string", () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        anthropicApiKey: "key",
+        anthropicModel: "claude-sonnet-4.6",
+      }),
+      "utf-8",
+    );
+    _resetForTest(settingsPath);
+
+    expect(getSettings().publicUrl).toBe("");
+  });
+
+  // Updating other settings preserves an existing publicUrl value
+  it("preserves publicUrl when updating other settings", () => {
+    updateSettings({ publicUrl: "https://example.com" });
+    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
+    expect(updated.publicUrl).toBe("https://example.com");
   });
 });

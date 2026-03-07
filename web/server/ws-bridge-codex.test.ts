@@ -95,6 +95,7 @@ function createMockDeps(overrides = {}): CodexAttachDeps {
     autoNamingAttempted: new Set<string>(),
     assistantMessageListeners: new Map(),
     resultListeners: new Map(),
+    onCLIRelaunchNeeded: vi.fn(),
     ...overrides,
   };
 }
@@ -128,6 +129,7 @@ describe("attachCodexAdapterHandlers", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       defaultPermissionMode: "plan",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -776,6 +778,70 @@ describe("attachCodexAdapterHandlers", () => {
     });
   });
 
+  it("onDisconnect triggers auto-relaunch when browsers are still connected", () => {
+    // When the transport drops mid-conversation and browsers are still connected,
+    // the session should be auto-relaunched instead of leaving users with a dead session.
+    session.codexAdapter = adapter as unknown as CodexAdapter;
+    // Simulate a connected browser
+    const fakeBrowserWs = {} as any;
+    session.browserSockets.add(fakeBrowserWs);
+    attachCodexAdapterHandlers("test-session", session, adapter as unknown as CodexAdapter, deps);
+
+    adapter._trigger("onDisconnect", undefined);
+
+    expect(deps.onCLIRelaunchNeeded).toHaveBeenCalledWith("test-session");
+  });
+
+  it("onDisconnect does NOT auto-relaunch when no browsers are connected", () => {
+    // If no browsers are watching, don't waste resources relaunching — the relaunch
+    // will happen when a browser reconnects via handleBrowserOpen.
+    session.codexAdapter = adapter as unknown as CodexAdapter;
+    expect(session.browserSockets.size).toBe(0);
+    attachCodexAdapterHandlers("test-session", session, adapter as unknown as CodexAdapter, deps);
+
+    adapter._trigger("onDisconnect", undefined);
+
+    expect(deps.onCLIRelaunchNeeded).not.toHaveBeenCalled();
+  });
+
+  it("onDisconnect does NOT auto-relaunch when callback is null", () => {
+    // When the relaunch callback is not configured, disconnect should still work
+    // without errors.
+    session.codexAdapter = adapter as unknown as CodexAdapter;
+    const fakeBrowserWs = {} as any;
+    session.browserSockets.add(fakeBrowserWs);
+    const depsNoRelaunch = createMockDeps({ onCLIRelaunchNeeded: null });
+    attachCodexAdapterHandlers("test-session", session, adapter as unknown as CodexAdapter, depsNoRelaunch);
+
+    // Should not throw
+    adapter._trigger("onDisconnect", undefined);
+
+    expect(session.codexAdapter).toBeNull();
+  });
+
+  it("stale adapter disconnect does NOT trigger auto-relaunch", () => {
+    // When a stale adapter disconnects after being replaced, it should not
+    // trigger a relaunch (the new adapter is already active).
+    const oldAdapter = createMockAdapter();
+    const newAdapter = createMockAdapter();
+    const fakeBrowserWs = {} as any;
+    session.browserSockets.add(fakeBrowserWs);
+
+    session.codexAdapter = oldAdapter as unknown as CodexAdapter;
+    attachCodexAdapterHandlers("test-session", session, oldAdapter as unknown as CodexAdapter, deps);
+
+    // Relaunch replaces the adapter
+    session.codexAdapter = newAdapter as unknown as CodexAdapter;
+    attachCodexAdapterHandlers("test-session", session, newAdapter as unknown as CodexAdapter, deps);
+    (deps.onCLIRelaunchNeeded as ReturnType<typeof vi.fn>).mockClear();
+
+    // Old adapter fires disconnect
+    oldAdapter._trigger("onDisconnect", undefined);
+
+    // Should NOT trigger relaunch since the old adapter was stale
+    expect(deps.onCLIRelaunchNeeded).not.toHaveBeenCalled();
+  });
+
   // ── Pending message flushing ────────────────────────────────────────────
 
   it("flushes pending messages to adapter on attach", () => {
@@ -884,6 +950,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1052,6 +1119,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1090,6 +1158,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1193,6 +1262,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: false,  // disabled
         aiValidationAutoDeny: true,
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1315,6 +1385,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: false,  // disabled
         defaultPermissionMode: "plan",
+        publicUrl: "",
         updateChannel: "stable",
         updatedAt: 0,
       });
