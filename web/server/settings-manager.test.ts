@@ -241,6 +241,8 @@ describe("settings-manager", () => {
     updateSettings({ defaultPermissionMode: "acceptEdits" });
     const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
     expect(updated.defaultPermissionMode).toBe("acceptEdits");
+  });
+
   // ─── publicUrl tests ────────────────────────────────────────────────────────
 
   // Default settings include publicUrl as empty string
