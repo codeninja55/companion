@@ -35,6 +35,7 @@ import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerPushRoutes } from "./routes/push-routes.js";
 import { getPushManager } from "./push-manager.js";
+import { registerTailscaleRoutes } from "./routes/tailscale-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
@@ -70,6 +71,7 @@ export function createRoutes(
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
   agentExecutor?: import("./agent-executor.js").AgentExecutor,
   chatBot?: import("./chat-bot.js").ChatBot,
+  port?: number,
 ) {
   const api = new Hono();
 
@@ -1752,6 +1754,10 @@ export function createRoutes(
 
   registerPromptRoutes(api);
   registerSettingsRoutes(api);
+
+  // ─── Tailscale ──────────────────────────────────────────────────────
+
+  if (port !== undefined) registerTailscaleRoutes(api, port);
 
   // ─── Linear ────────────────────────────────────────────────────────
 
