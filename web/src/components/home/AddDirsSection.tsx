@@ -109,6 +109,16 @@ export function AddDirsSection({ directories, onChange, initialPath = "" }: AddD
               <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
             </svg>
           </button>
+          <button
+            type="button"
+            onClick={() => { setShowInput(false); setInputValue(""); }}
+            className="px-2 py-1.5 text-xs rounded-lg bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+            title="Cancel"
+            aria-label="Cancel adding directory"
+            data-testid="add-dir-cancel"
+          >
+            &times;
+          </button>
         </div>
       )}
 

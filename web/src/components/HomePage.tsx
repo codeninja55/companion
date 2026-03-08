@@ -22,7 +22,6 @@ import { EnvManager } from "./EnvManager.js";
 import { ProviderManager } from "./ProviderManager.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { RemoteConnect } from "./RemoteConnect.js";
-import { AddDirsModal } from "./AddDirsModal.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { LinearSection } from "./home/LinearSection.js";
 import { AddDirsSection } from "./home/AddDirsSection.js";
@@ -151,7 +150,6 @@ export function HomePage() {
   // Additional directories state
   const [selectedAddDirsPreset, setSelectedAddDirsPreset] = useState("");
   const [additionalDirs, setAdditionalDirs] = useState<string[]>([]);
-  const [showAddDirPicker, setShowAddDirPicker] = useState(false);
 
   // Dropdown states
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -1464,34 +1462,6 @@ export function HomePage() {
               }}
             />
           </div>
-
-          {/* Additional directories button + modal */}
-          <button
-            onClick={() => setShowAddDirPicker(true)}
-            className={`flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-md transition-colors cursor-pointer ${
-              additionalDirs.length > 0
-                ? "text-cc-primary bg-cc-primary/10 hover:bg-cc-primary/15"
-                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-            }`}
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-60">
-              <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.354.146H13.5A1.5 1.5 0 0115 4.707V12.5A1.5 1.5 0 0113.5 14h-11A1.5 1.5 0 011 12.5v-9z" />
-            </svg>
-            <span className="max-w-[100px] truncate">
-              {additionalDirs.length > 0 ? `Dirs (${additionalDirs.length})` : "Add dirs"}
-            </span>
-          </button>
-          {showAddDirPicker && (
-            <AddDirsModal
-              directories={additionalDirs}
-              onChange={(dirs) => {
-                setAdditionalDirs(dirs);
-                setSelectedAddDirsPreset("");
-              }}
-              onClose={() => setShowAddDirPicker(false)}
-              initialPath={cwd || ""}
-            />
-          )}
 
           {/* Dangerous permissions toggle */}
           <button

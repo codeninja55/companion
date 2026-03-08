@@ -163,6 +163,20 @@ describe("AddDirsSection", () => {
     expect(screen.getByTestId("folder-picker")).toBeInTheDocument();
   });
 
+  it("cancel button dismisses the input", () => {
+    render(<AddDirsSection directories={[]} onChange={mockOnChange} />);
+
+    // Show the input
+    fireEvent.click(screen.getByTestId("add-dir-btn"));
+    expect(screen.getByTestId("add-dir-input")).toBeInTheDocument();
+
+    // Click the cancel button
+    fireEvent.click(screen.getByTestId("add-dir-cancel"));
+
+    // Input should be hidden
+    expect(screen.queryByTestId("add-dir-input")).not.toBeInTheDocument();
+  });
+
   it("Add button confirms input value", () => {
     render(<AddDirsSection directories={[]} onChange={mockOnChange} />);
 
