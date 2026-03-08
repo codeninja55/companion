@@ -28,6 +28,10 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 4545,
     strictPort: false,
+    allowedHosts: [
+      "phaestostech-ubuntu-1.tail20692e.ts.net",
+      "companion.phaestos.dev",
+    ],
     proxy: {
       "/api": "http://localhost:4568",
       "/ws": {

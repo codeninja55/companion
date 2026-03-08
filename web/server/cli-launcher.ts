@@ -557,8 +557,14 @@ export class CliLauncher {
       return;
     }
 
-    // Build env vars to forward to the remote: API key or OAuth credentials
+    // Build env vars to forward to the remote: profile-level env vars as base,
+    // then API key or OAuth credentials, then session-level env vars on top.
     const envVars: Record<string, string> = {};
+    if (profile.envVars) {
+      for (const [k, v] of Object.entries(profile.envVars)) {
+        envVars[k] = v;
+      }
+    }
     if (process.env.ANTHROPIC_API_KEY) {
       envVars.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     } else {

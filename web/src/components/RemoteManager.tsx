@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import type { RemoteProfile } from "../types.js";
 
@@ -16,7 +15,7 @@ export function RemoteManager({ onClose, embedded = false }: Props) {
   const [editHost, setEditHost] = useState("");
   const [editPort, setEditPort] = useState(22);
   const [editUsername, setEditUsername] = useState("");
-  const [editAuthMethod, setEditAuthMethod] = useState<"key" | "password">("key");
+  const [editAuthMethod, setEditAuthMethod] = useState<"key" | "password" | "tailscale">("key");
   const [editKeyPath, setEditKeyPath] = useState("");
   const [error, setError] = useState("");
 
@@ -105,16 +104,24 @@ export function RemoteManager({ onClose, embedded = false }: Props) {
 
   const content = (
     <div className="remote-manager" data-testid="remote-manager">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>Remote Profiles</h2>
-        <div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-sm font-semibold text-cc-fg">Remote Profiles</h2>
+        <div className="flex items-center gap-2">
           {!isEditing && (
-            <button onClick={startCreate} data-testid="add-remote-btn">
+            <button
+              onClick={startCreate}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
+              data-testid="add-remote-btn"
+            >
               Add Remote
             </button>
           )}
           {!embedded && onClose && (
-            <button onClick={onClose} style={{ marginLeft: 8 }} data-testid="close-remote-btn">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-lg text-xs text-cc-muted hover:text-cc-fg bg-cc-hover hover:bg-cc-active transition-colors cursor-pointer"
+              data-testid="close-remote-btn"
+            >
               Close
             </button>
           )}
@@ -122,90 +129,106 @@ export function RemoteManager({ onClose, embedded = false }: Props) {
       </div>
 
       {error && (
-        <div className="error-banner" role="alert" style={{ color: "red", marginBottom: 12 }}>
+        <div
+          className="mb-3 px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error"
+          role="alert"
+        >
           {error}
         </div>
       )}
 
       {isEditing && (
-        <div className="remote-form" data-testid="remote-form">
-          <div style={{ marginBottom: 8 }}>
-            <label htmlFor="remote-name">Name</label>
+        <div className="remote-form space-y-3" data-testid="remote-form">
+          <div>
+            <label htmlFor="remote-name" className="block text-[11px] text-cc-muted mb-1.5">Name</label>
             <input
               id="remote-name"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               placeholder="e.g. GPU Server"
+              className="w-full px-3 py-2.5 min-h-[44px] bg-cc-input-bg border border-cc-border rounded-lg text-sm text-cc-fg"
             />
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <label htmlFor="remote-host">Host</label>
+          <div>
+            <label htmlFor="remote-host" className="block text-[11px] text-cc-muted mb-1.5">Host</label>
             <input
               id="remote-host"
               value={editHost}
               onChange={(e) => setEditHost(e.target.value)}
               placeholder="e.g. 192.168.1.100"
+              className="w-full px-3 py-2.5 min-h-[44px] bg-cc-input-bg border border-cc-border rounded-lg text-sm text-cc-fg"
             />
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <label htmlFor="remote-port">Port</label>
+          <div>
+            <label htmlFor="remote-port" className="block text-[11px] text-cc-muted mb-1.5">Port</label>
             <input
               id="remote-port"
               type="number"
               value={editPort}
               onChange={(e) => setEditPort(Number(e.target.value))}
+              className="w-full px-3 py-2.5 min-h-[44px] bg-cc-input-bg border border-cc-border rounded-lg text-sm text-cc-fg"
             />
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <label htmlFor="remote-username">Username</label>
+          <div>
+            <label htmlFor="remote-username" className="block text-[11px] text-cc-muted mb-1.5">Username</label>
             <input
               id="remote-username"
               value={editUsername}
               onChange={(e) => setEditUsername(e.target.value)}
               placeholder="e.g. root"
+              className="w-full px-3 py-2.5 min-h-[44px] bg-cc-input-bg border border-cc-border rounded-lg text-sm text-cc-fg"
             />
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <label>Auth Method</label>
-            <div role="radiogroup" aria-label="Authentication method">
-              <label>
-                <input
-                  type="radio"
-                  name="authMethod"
-                  value="key"
-                  checked={editAuthMethod === "key"}
-                  onChange={() => setEditAuthMethod("key")}
-                />
-                SSH Key
-              </label>
-              <label style={{ marginLeft: 16 }}>
-                <input
-                  type="radio"
-                  name="authMethod"
-                  value="password"
-                  checked={editAuthMethod === "password"}
-                  onChange={() => setEditAuthMethod("password")}
-                />
-                Password
-              </label>
+          <div>
+            <label className="block text-[11px] text-cc-muted mb-1.5">Auth Method</label>
+            <div
+              className="flex rounded-lg border border-cc-border overflow-hidden"
+              role="radiogroup"
+              aria-label="Authentication method"
+            >
+              {(["key", "password", "tailscale"] as const).map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  role="radio"
+                  aria-checked={editAuthMethod === method}
+                  onClick={() => setEditAuthMethod(method)}
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                    editAuthMethod === method
+                      ? "bg-cc-primary/15 text-cc-primary border-r border-cc-border"
+                      : "bg-cc-input-bg text-cc-muted hover:text-cc-fg hover:bg-cc-hover border-r border-cc-border"
+                  } last:border-r-0`}
+                >
+                  {method === "key" ? "SSH Key" : method === "password" ? "Password" : "Tailscale"}
+                </button>
+              ))}
             </div>
           </div>
           {editAuthMethod === "key" && (
-            <div style={{ marginBottom: 8 }}>
-              <label htmlFor="remote-keypath">Key Path</label>
+            <div>
+              <label htmlFor="remote-keypath" className="block text-[11px] text-cc-muted mb-1.5">Key Path</label>
               <input
                 id="remote-keypath"
                 value={editKeyPath}
                 onChange={(e) => setEditKeyPath(e.target.value)}
                 placeholder="e.g. ~/.ssh/id_rsa"
+                className="w-full px-3 py-2.5 min-h-[44px] bg-cc-input-bg border border-cc-border rounded-lg text-sm text-cc-fg font-mono-code"
               />
             </div>
           )}
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button onClick={handleSave} data-testid="save-remote-btn">
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 rounded-lg text-xs font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
+              data-testid="save-remote-btn"
+            >
               {editingSlug === "__new__" ? "Create" : "Save"}
             </button>
-            <button onClick={resetForm} data-testid="cancel-remote-btn">
+            <button
+              onClick={resetForm}
+              className="px-4 py-2 rounded-lg text-xs text-cc-muted hover:text-cc-fg bg-cc-hover hover:bg-cc-active transition-colors cursor-pointer"
+              data-testid="cancel-remote-btn"
+            >
               Cancel
             </button>
           </div>
@@ -213,50 +236,48 @@ export function RemoteManager({ onClose, embedded = false }: Props) {
       )}
 
       {loading ? (
-        <div>Loading...</div>
+        <div className="text-sm text-cc-muted">Loading...</div>
       ) : profiles.length === 0 && !isEditing ? (
-        <div data-testid="empty-message">
+        <div data-testid="empty-message" className="text-sm text-cc-muted py-4">
           No remote profiles yet. Add one to get started.
         </div>
       ) : (
         !isEditing && (
-          <ul style={{ listStyle: "none", padding: 0 }} data-testid="profile-list">
+          <div className="space-y-1" data-testid="profile-list">
             {profiles.map((p) => (
-              <li
+              <div
                 key={p.slug}
                 data-testid={`profile-${p.slug}`}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "8px 0",
-                  borderBottom: "1px solid #333",
-                }}
+                className="flex justify-between items-center px-3 py-2.5 rounded-lg bg-cc-hover"
               >
                 <div>
-                  <strong>{p.name}</strong>
-                  <span style={{ color: "#888", marginLeft: 8 }}>
+                  <strong className="text-sm text-cc-fg">{p.name}</strong>
+                  <span className="text-xs text-cc-muted ml-2">
                     {p.username}@{p.host}:{p.port}
                   </span>
-                  <span style={{ color: "#666", marginLeft: 8 }}>
+                  <span className="text-xs text-cc-muted/60 ml-2">
                     ({p.authMethod})
                   </span>
                 </div>
-                <div>
-                  <button onClick={() => startEdit(p)} data-testid={`edit-${p.slug}`}>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => startEdit(p)}
+                    className="px-2 py-1 text-[11px] rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                    data-testid={`edit-${p.slug}`}
+                  >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(p.slug)}
-                    style={{ marginLeft: 4 }}
+                    className="px-2 py-1 text-[11px] rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
                     data-testid={`delete-${p.slug}`}
                   >
                     Delete
                   </button>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )
       )}
     </div>
@@ -264,33 +285,15 @@ export function RemoteManager({ onClose, embedded = false }: Props) {
 
   if (embedded) return content;
 
-  return createPortal(
+  return (
     <div
-      className="modal-overlay"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
       data-testid="remote-manager-modal"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
     >
-      <div style={{
-        background: "#1a1a1a",
-        borderRadius: 12,
-        padding: 24,
-        maxWidth: 600,
-        width: "90%",
-        maxHeight: "80vh",
-        overflow: "auto",
-      }}>
+      <div className="mx-4 w-full max-w-lg bg-cc-card border border-cc-border rounded-xl shadow-2xl p-5 max-h-[80vh] overflow-auto">
         {content}
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }

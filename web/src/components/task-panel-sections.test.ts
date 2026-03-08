@@ -32,11 +32,12 @@ describe("getInitialTaskPanelConfig", () => {
   it("restores a valid saved config from localStorage", () => {
     // Save a config with a custom order and one section disabled
     const saved = {
-      order: ["tasks", "git-branch", "usage-limits", "github-pr", "linear-issue", "mcp-servers"],
+      order: ["tasks", "git-branch", "usage-limits", "github-pr", "additional-dirs", "linear-issue", "mcp-servers"],
       enabled: {
         "usage-limits": true,
         "git-branch": true,
         "github-pr": false,
+        "additional-dirs": true,
         "linear-issue": true,
         "mcp-servers": true,
         "tasks": true,
@@ -66,12 +67,13 @@ describe("getInitialTaskPanelConfig", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
 
     const config = getInitialTaskPanelConfig();
-    // The two missing sections should be appended at the end
+    // The missing sections should be appended at the end
     expect(config.order).toEqual([
       "usage-limits", "git-branch", "github-pr", "linear-issue",
-      "mcp-servers", "tasks",
+      "additional-dirs", "mcp-servers", "tasks",
     ]);
     // New sections should be enabled by default
+    expect(config.enabled["additional-dirs"]).toBe(true);
     expect(config.enabled["mcp-servers"]).toBe(true);
     expect(config.enabled["tasks"]).toBe(true);
     // Existing disabled state should be preserved
@@ -81,12 +83,13 @@ describe("getInitialTaskPanelConfig", () => {
   it("filters out removed sections that no longer exist in SECTION_DEFINITIONS", () => {
     // Simulate a saved config that includes a section ID that no longer exists
     const saved = {
-      order: ["usage-limits", "old-removed-section", "git-branch", "github-pr", "linear-issue", "mcp-servers", "tasks"],
+      order: ["usage-limits", "old-removed-section", "git-branch", "github-pr", "additional-dirs", "linear-issue", "mcp-servers", "tasks"],
       enabled: {
         "usage-limits": true,
         "old-removed-section": true,
         "git-branch": true,
         "github-pr": true,
+        "additional-dirs": true,
         "linear-issue": true,
         "mcp-servers": true,
         "tasks": true,
@@ -99,7 +102,7 @@ describe("getInitialTaskPanelConfig", () => {
     expect(config.order).not.toContain("old-removed-section");
     // All valid sections should remain in their saved order
     expect(config.order).toEqual([
-      "usage-limits", "git-branch", "github-pr", "linear-issue", "mcp-servers", "tasks",
+      "usage-limits", "git-branch", "github-pr", "additional-dirs", "linear-issue", "mcp-servers", "tasks",
     ]);
   });
 
@@ -125,7 +128,8 @@ describe("getInitialTaskPanelConfig", () => {
     expect(config.order).toContain("linear-issue");
     expect(config.order).toContain("mcp-servers");
     expect(config.order).toContain("tasks");
-    expect(config.order.length).toBe(6);
+    expect(config.order).toContain("additional-dirs");
+    expect(config.order.length).toBe(7);
   });
 
   it("returns defaults when localStorage contains corrupted JSON", () => {

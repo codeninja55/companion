@@ -22,10 +22,10 @@ import { EnvManager } from "./EnvManager.js";
 import { ProviderManager } from "./ProviderManager.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { RemoteConnect } from "./RemoteConnect.js";
-import { RemoteManager } from "./RemoteManager.js";
 import { AddDirsModal } from "./AddDirsModal.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { LinearSection } from "./home/LinearSection.js";
+import { AddDirsSection } from "./home/AddDirsSection.js";
 import { BranchPicker } from "./home/BranchPicker.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { useMentionMenu } from "../utils/use-mention-menu.js";
@@ -159,7 +159,6 @@ export function HomePage() {
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [showRemoteConnect, setShowRemoteConnect] = useState(false);
   const [showRemoteDropdown, setShowRemoteDropdown] = useState(false);
-  const [showRemoteManager, setShowRemoteManager] = useState(false);
   const [remoteProfiles, setRemoteProfiles] = useState<import("../types.js").RemoteProfile[]>([]);
   const [remoteConnectionId, setRemoteConnectionId] = useState<string | null>(null);
   const [remoteCwd, setRemoteCwd] = useState<string | null>(null);
@@ -1154,7 +1153,7 @@ export function HomePage() {
                   <button
                     onClick={() => {
                       setShowRemoteDropdown(false);
-                      setShowRemoteManager(true);
+                      window.location.hash = "#/remotes";
                     }}
                     className="w-full px-3 py-2 text-xs text-left text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
                     data-testid="remote-manage-btn"
@@ -1170,14 +1169,6 @@ export function HomePage() {
                     setRemoteConnectionId(connId);
                     setRemoteCwd(cwdPath);
                     setShowRemoteConnect(false);
-                  }}
-                />
-              )}
-              {showRemoteManager && (
-                <RemoteManager
-                  onClose={() => {
-                    setShowRemoteManager(false);
-                    api.listRemoteProfiles().then(setRemoteProfiles).catch(() => {});
                   }}
                 />
               )}
@@ -1736,6 +1727,15 @@ export function HomePage() {
               </div>
             )}
           </div>
+
+          <AddDirsSection
+            directories={additionalDirs}
+            onChange={(dirs) => {
+              setAdditionalDirs(dirs);
+              setSelectedAddDirsPreset("");
+            }}
+            initialPath={cwd || ""}
+          />
 
           <LinearSection
             cwd={cwd}
