@@ -127,8 +127,10 @@ export interface RemoteProfile {
   host: string;
   port: number;
   username: string;
-  authMethod: "key" | "password";
+  authMethod: "key" | "password" | "tailscale";
   keyPath?: string;
+  keyContent?: string;
+  envVars?: Record<string, string>;
   createdAt: number;
   updatedAt: number;
 }

@@ -11,6 +11,7 @@ import { timeAgo } from "../utils/time-ago.js";
 import { captureException } from "../analytics.js";
 import { SectionErrorBoundary } from "./SectionErrorBoundary.js";
 import { AgentProgressPanel } from "./AgentProgressPanel.js";
+import { AddDirsPanel } from "./AddDirsPanel.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const COUNTDOWN_REFRESH_MS = 30_000;
@@ -970,6 +971,7 @@ const SECTION_COMPONENTS: Record<string, ComponentType<{ sessionId: string }>> =
   "usage-limits": UsageLimitsRenderer,
   "git-branch": GitBranchSection,
   "github-pr": GitHubPRSection,
+  "additional-dirs": AddDirsPanel,
   "linear-issue": LinearIssueSection,
   "mcp-servers": McpSection,
   "tasks": TasksSection,

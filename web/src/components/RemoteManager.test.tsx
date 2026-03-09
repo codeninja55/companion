@@ -120,8 +120,8 @@ describe("RemoteManager", () => {
     // Key auth is default — key path should be visible
     expect(screen.getByLabelText("Key Path")).toBeInTheDocument();
 
-    // Switch to password auth
-    fireEvent.click(screen.getByLabelText("Password"));
+    // Switch to password auth via toggle button
+    fireEvent.click(screen.getByRole("radio", { name: "Password" }));
     expect(screen.queryByLabelText("Key Path")).not.toBeInTheDocument();
   });
 

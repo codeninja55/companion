@@ -31,6 +31,7 @@ const AgentsPage = lazy(() => import("./components/AgentsPage.js").then((m) => (
 const RunsPage = lazy(() => import("./components/RunsPage.js").then((m) => ({ default: m.RunsPage })));
 const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) => ({ default: m.TerminalPage })));
 const ProcessPanel = lazy(() => import("./components/ProcessPanel.js").then((m) => ({ default: m.ProcessPanel })));
+const RemotesPage = lazy(() => import("./components/RemotesPage.js").then((m) => ({ default: m.RemotesPage })));
 
 
 function LazyFallback() {
@@ -71,6 +72,7 @@ export default function App() {
   const isTailscaleIntegrationPage = route.page === "integration-tailscale";
   const isTerminalPage = route.page === "terminal";
   const isEnvironmentsPage = route.page === "environments";
+  const isRemotesPage = route.page === "remotes";
   const isDockerBuilderPage = route.page === "docker-builder";
   const isScheduledPage = route.page === "scheduled";
   const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
@@ -238,6 +240,12 @@ export default function App() {
           {isEnvironmentsPage && (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><EnvManager embedded /></Suspense>
+            </div>
+          )}
+
+          {isRemotesPage && (
+            <div className="absolute inset-0">
+              <Suspense fallback={<LazyFallback />}><RemotesPage /></Suspense>
             </div>
           )}
 

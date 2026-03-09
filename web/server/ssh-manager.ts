@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import type { Subprocess } from "bun";
 import type { RemoteProfile } from "./remote-profile-manager.js";
 import { validateHost, validatePort, validateUsername } from "./remote-profile-manager.js";
@@ -21,6 +24,25 @@ const connections = new Map<string, RemoteConnection>();
 const processes = new Map<string, Subprocess>();
 // Tracks ports currently allocated to active connections to prevent double-allocation.
 const allocatedPorts = new Set<number>();
+
+// ─── Temp key file helpers ──────────────────────────────────────────────────
+
+const tempKeyFiles = new Map<string, string>();
+
+function writeTempKey(content: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "companion-ssh-"));
+  const keyPath = join(dir, "key");
+  writeFileSync(keyPath, content, { mode: 0o600 });
+  return keyPath;
+}
+
+function cleanupTempKey(path: string): void {
+  try { unlinkSync(path); } catch { /* ok */ }
+  try {
+    const dir = path.replace(/\/[^/]+$/, "");
+    unlinkSync(dir);
+  } catch { /* ok */ }
+}
 
 // ─── Port allocation ────────────────────────────────────────────────────────
 
@@ -54,15 +76,22 @@ function buildSshArgs(profile: RemoteProfile, extraArgs: string[] = []): string[
   if (!validatePort(profile.port)) throw new Error("Invalid port");
   if (!validateUsername(profile.username)) throw new Error("Invalid username");
 
-  const args = [
-    "ssh",
-    "-o", "BatchMode=yes",
-    "-o", "StrictHostKeyChecking=accept-new",
-    "-p", String(profile.port),
-  ];
+  const args = ["ssh"];
 
-  if (profile.authMethod === "key" && profile.keyPath) {
-    args.push("-i", profile.keyPath);
+  if (profile.authMethod !== "tailscale") {
+    args.push("-o", "BatchMode=yes");
+  }
+  args.push("-o", "StrictHostKeyChecking=accept-new");
+  args.push("-p", String(profile.port));
+
+  if (profile.authMethod === "key") {
+    if (profile.keyPath) {
+      args.push("-i", profile.keyPath);
+    } else if (profile.keyContent) {
+      const tmpPath = writeTempKey(profile.keyContent);
+      tempKeyFiles.set(profile.slug, tmpPath);
+      args.push("-i", tmpPath);
+    }
   }
 
   args.push(...extraArgs);
@@ -273,8 +302,14 @@ export function buildRemoteLaunchCommand(
     "-p", String(profile.port),
   ];
 
-  if (profile.authMethod === "key" && profile.keyPath) {
-    args.push("-i", profile.keyPath);
+  if (profile.authMethod === "key") {
+    if (profile.keyPath) {
+      args.push("-i", profile.keyPath);
+    } else if (profile.keyContent) {
+      const tmpPath = writeTempKey(profile.keyContent);
+      tempKeyFiles.set("launch-" + sessionId, tmpPath);
+      args.push("-i", tmpPath);
+    }
   }
 
   args.push(userHost);
@@ -310,6 +345,78 @@ export function buildRemoteLaunchCommand(
   args.push(`exec "\${SHELL:-bash}" -lc '${shellEscape(innerCommand)}'`);
 
   return args;
+}
+
+/**
+ * Check whether a directory exists on the remote machine.
+ */
+export async function checkRemoteDir(
+  connectionId: string,
+  profile: RemoteProfile,
+  remotePath: string,
+): Promise<{ exists: boolean }> {
+  const conn = connections.get(connectionId);
+  if (!conn) throw new Error("Connection not found");
+
+  const args = buildSshArgs(profile, ["-o", "ConnectTimeout=10"]);
+  args.push("test", "-d", remotePath, "&&", "echo", "yes", "||", "echo", "no");
+
+  try {
+    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+    const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+    return { exists: exitCode === 0 && stdout.trim() === "yes" };
+  } catch {
+    return { exists: false };
+  }
+}
+
+/**
+ * Sync a local directory to a remote directory via rsync over SSH.
+ */
+export async function syncDirectory(
+  connectionId: string,
+  profile: RemoteProfile,
+  localPath: string,
+  remotePath: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const conn = connections.get(connectionId);
+  if (!conn) throw new Error("Connection not found");
+
+  // Build SSH options string for rsync -e
+  const sshOpts: string[] = ["ssh"];
+  if (profile.authMethod !== "tailscale") {
+    sshOpts.push("-o", "BatchMode=yes");
+  }
+  sshOpts.push("-o", "StrictHostKeyChecking=accept-new");
+  sshOpts.push("-p", String(profile.port));
+  if (profile.authMethod === "key" && profile.keyPath) {
+    sshOpts.push("-i", profile.keyPath);
+  } else if (profile.authMethod === "key" && profile.keyContent) {
+    const tmpPath = writeTempKey(profile.keyContent);
+    tempKeyFiles.set("sync-" + connectionId, tmpPath);
+    sshOpts.push("-i", tmpPath);
+  }
+
+  const sshCmd = sshOpts.map((s) => s.includes(" ") ? `"${s}"` : s).join(" ");
+  const dest = `${profile.username}@${profile.host}:${remotePath}/`;
+  const src = localPath.endsWith("/") ? localPath : localPath + "/";
+
+  const args = ["rsync", "-avz", "-e", sshCmd, src, dest];
+
+  try {
+    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+    const exitCode = await proc.exited;
+    // Clean up temp key
+    const tmpKey = tempKeyFiles.get("sync-" + connectionId);
+    if (tmpKey) { cleanupTempKey(tmpKey); tempKeyFiles.delete("sync-" + connectionId); }
+
+    if (exitCode === 0) return { ok: true };
+    const stderr = await new Response(proc.stderr).text();
+    return { ok: false, error: stderr.trim() || "rsync exited with code " + exitCode };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** Get a connection by ID. */

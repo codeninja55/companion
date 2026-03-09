@@ -17,8 +17,10 @@ export type RemoteProfile = {
   host: string;
   port: number;
   username: string;
-  authMethod: "key" | "password";
+  authMethod: "key" | "password" | "tailscale";
   keyPath?: string;
+  keyContent?: string;
+  envVars?: Record<string, string>;
   createdAt: number;
   updatedAt: number;
 };
@@ -28,8 +30,10 @@ export interface RemoteProfileCreateFields {
   host: string;
   port?: number;
   username: string;
-  authMethod: "key" | "password";
+  authMethod: "key" | "password" | "tailscale";
   keyPath?: string;
+  keyContent?: string;
+  envVars?: Record<string, string>;
 }
 
 export interface RemoteProfileUpdateFields {
@@ -37,8 +41,10 @@ export interface RemoteProfileUpdateFields {
   host?: string;
   port?: number;
   username?: string;
-  authMethod?: "key" | "password";
+  authMethod?: "key" | "password" | "tailscale";
   keyPath?: string;
+  keyContent?: string;
+  envVars?: Record<string, string>;
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -159,6 +165,8 @@ export function createProfile(data: RemoteProfileCreateFields): RemoteProfile {
     username: data.username,
     authMethod: data.authMethod,
     keyPath: data.authMethod === "key" ? data.keyPath : undefined,
+    keyContent: data.authMethod === "key" ? data.keyContent : undefined,
+    envVars: data.envVars,
     createdAt: now,
     updatedAt: now,
   };
@@ -205,6 +213,8 @@ export function updateProfile(
     username: updates.username ?? existing.username,
     authMethod,
     keyPath: authMethod === "key" ? (updates.keyPath ?? existing.keyPath) : undefined,
+    keyContent: authMethod === "key" ? (updates.keyContent ?? existing.keyContent) : undefined,
+    envVars: updates.envVars !== undefined ? updates.envVars : existing.envVars,
     updatedAt: Date.now(),
   };
 

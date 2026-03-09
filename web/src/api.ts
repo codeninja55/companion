@@ -1255,16 +1255,20 @@ export const api = {
     host: string;
     port?: number;
     username: string;
-    authMethod: "key" | "password";
+    authMethod: "key" | "password" | "tailscale";
     keyPath?: string;
+    keyContent?: string;
+    envVars?: Record<string, string>;
   }) => post<import("./types.js").RemoteProfile>("/remotes", data),
   updateRemoteProfile: (slug: string, data: {
     name?: string;
     host?: string;
     port?: number;
     username?: string;
-    authMethod?: "key" | "password";
+    authMethod?: "key" | "password" | "tailscale";
     keyPath?: string;
+    keyContent?: string;
+    envVars?: Record<string, string>;
   }) => put<import("./types.js").RemoteProfile>(`/remotes/${encodeURIComponent(slug)}`, data),
   deleteRemoteProfile: (slug: string) =>
     del(`/remotes/${encodeURIComponent(slug)}`),
@@ -1286,4 +1290,26 @@ export const api = {
     post<{ ok: boolean; error?: string }>(`/remotes/connections/${encodeURIComponent(connectionId)}/mkdir`, { path }),
   listRemoteConnections: () =>
     get<import("./types.js").RemoteConnection[]>("/remotes/connections"),
+  uploadRemoteKey: async (slug: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const startedAt = nowMs();
+    const res = await fetch(`${BASE}/remotes/${encodeURIComponent(slug)}/upload-key`, {
+      method: "POST",
+      headers: { ...getAuthHeaders() },
+      body: formData,
+    });
+    if (!res.ok) {
+      handle401(res.status);
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      trackApiFailure("POST", `/remotes/${slug}/upload-key`, nowMs() - startedAt, new Error((err as {error?:string}).error || res.statusText), res.status);
+      throw new Error((err as { error?: string }).error || res.statusText);
+    }
+    trackApiSuccess("POST", `/remotes/${slug}/upload-key`, nowMs() - startedAt, res.status);
+    return res.json() as Promise<import("./types.js").RemoteProfile>;
+  },
+  checkRemoteDir: (connectionId: string, path: string) =>
+    post<{ exists: boolean }>(`/remotes/connections/${encodeURIComponent(connectionId)}/check-dir`, { path }),
+  syncRemoteDir: (connectionId: string, localPath: string, remotePath: string) =>
+    post<{ ok: boolean; error?: string }>(`/remotes/connections/${encodeURIComponent(connectionId)}/sync-dir`, { localPath, remotePath }),
 };

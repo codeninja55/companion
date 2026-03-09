@@ -44,6 +44,12 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
     backends: null,
   },
   {
+    id: "additional-dirs",
+    label: "Directories",
+    description: "Additional directories for this session",
+    backends: ["claude"],
+  },
+  {
     id: "linear-issue",
     label: "Linear Issue",
     description: "Linked Linear ticket and comments",
