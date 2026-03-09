@@ -29,7 +29,7 @@ export default defineConfig({
     port: 4545,
     strictPort: false,
     allowedHosts: [
-      "phaestostech-ubuntu-1.tail20692e.ts.net",
+      "phaestosdev-ubuntu-1.tail20692e.ts.net",
       "companion.phaestos.dev",
     ],
     proxy: {
