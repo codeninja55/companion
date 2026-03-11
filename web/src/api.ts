@@ -403,6 +403,13 @@ export interface EditorStartResult {
   message?: string;
 }
 
+export interface BrowserStartResult {
+  available: boolean;
+  mode: "host" | "container";
+  url?: string;
+  message?: string;
+}
+
 /** Keep in sync with web/server/tailscale-manager.ts TailscaleStatus */
 export interface TailscaleStatus {
   installed: boolean;
@@ -434,6 +441,23 @@ export interface AppSettings {
   publicUrl: string;
   updateChannel: "stable" | "prerelease";
   defaultPermissionMode?: string;
+}
+
+export interface LinearConnectionSummary {
+  id: string;
+  name: string;
+  apiKeyLast4: string;
+  workspaceName: string;
+  workspaceId: string;
+  viewerName: string;
+  viewerEmail: string;
+  connected: boolean;
+  autoTransition: boolean;
+  autoTransitionStateId: string;
+  autoTransitionStateName: string;
+  archiveTransition: boolean;
+  archiveTransitionStateId: string;
+  archiveTransitionStateName: string;
 }
 
 export interface LinearConnectionSummary {
@@ -1126,6 +1150,18 @@ export const api = {
   startEditor: (sessionId: string) =>
     post<EditorStartResult>(
       `/sessions/${encodeURIComponent(sessionId)}/editor/start`,
+    ),
+
+  // Browser preview
+  startBrowser: (sessionId: string, url?: string) =>
+    post<BrowserStartResult>(
+      `/sessions/${encodeURIComponent(sessionId)}/browser/start`,
+      url ? { url } : undefined,
+    ),
+  navigateBrowser: (sessionId: string, url: string) =>
+    post<{ ok?: boolean; error?: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/browser/navigate`,
+      { url },
     ),
 
   // Editor filesystem

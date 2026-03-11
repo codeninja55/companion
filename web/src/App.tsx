@@ -15,6 +15,7 @@ import { UpdateBanner } from "./components/UpdateBanner.js";
 import { SessionLaunchOverlay } from "./components/SessionLaunchOverlay.js";
 import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
 import { SessionEditorPane } from "./components/SessionEditorPane.js";
+import { SessionBrowserPane } from "./components/SessionBrowserPane.js";
 import { UpdateOverlay } from "./components/UpdateOverlay.js";
 
 // Lazy-loaded route-level pages (not needed for initial render)
@@ -277,7 +278,9 @@ export default function App() {
             <>
               <div className="absolute inset-0">
                 {currentSessionId ? (
-                  activeTab === "terminal"
+                  activeTab === "browser"
+                    ? <SessionBrowserPane sessionId={currentSessionId} />
+                    : activeTab === "terminal"
                     ? (
                       <SessionTerminalDock
                         sessionId={currentSessionId}
