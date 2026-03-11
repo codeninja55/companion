@@ -219,6 +219,8 @@ export interface LaunchOptions {
   allowDangerousPermissions?: boolean;
   /** Additional directories to pass as --add-dir */
   addDirs?: string[];
+  /** Optional system prompt to inject into Codex sessions (e.g. Linear context). */
+  systemPrompt?: string;
 }
 
 /**
@@ -1036,7 +1038,7 @@ export class CliLauncher {
       threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
       recorder: this.recorder ?? undefined,
-      mcpConfigSlug: options.mcpConfigSlug,
+      systemPrompt: options.systemPrompt,
       killProcess: async () => {
         try {
           proxyProc.kill("SIGTERM");
@@ -1233,7 +1235,7 @@ export class CliLauncher {
       threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
       recorder: this.recorder ?? undefined,
-      mcpConfigSlug: options.mcpConfigSlug,
+      systemPrompt: options.systemPrompt,
     });
 
     // Handle init errors — mark session as exited so UI shows failure.

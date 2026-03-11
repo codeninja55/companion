@@ -7,12 +7,12 @@ vi.mock("../api.js", () => ({
   api: {
     getSessionUsageLimits: vi.fn().mockRejectedValue(new Error("skip")),
     getPRStatus: vi.fn().mockRejectedValue(new Error("skip")),
-    getLinkedLinearIssues: vi.fn().mockResolvedValue({ issues: [] }),
+    getLinkedLinearIssue: vi.fn().mockResolvedValue({ issue: null }),
     gitPull: vi.fn().mockResolvedValue({ success: true, git_ahead: 0, git_behind: 0, output: "" }),
     searchLinearIssues: vi.fn().mockResolvedValue({ issues: [] }),
     addLinearComment: vi.fn().mockResolvedValue({ comment: { id: "c1", body: "test", createdAt: new Date().toISOString(), userName: "User" } }),
-    removeLinearIssue: vi.fn().mockResolvedValue({}),
-    addLinearIssue: vi.fn().mockResolvedValue({}),
+    unlinkLinearIssue: vi.fn().mockResolvedValue({}),
+    linkLinearIssue: vi.fn().mockResolvedValue({}),
     archiveSession: vi.fn().mockResolvedValue({}),
   },
 }));
@@ -1299,8 +1299,8 @@ describe("LinearIssueSection", () => {
 
   it("renders linked issue identifier and state pill", async () => {
     // When an issue is linked, show its identifier and state
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [mockLinearIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: mockLinearIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1314,8 +1314,8 @@ describe("LinearIssueSection", () => {
 
   it("renders priority and team name for linked issue", async () => {
     // Metadata row should include priority label and team name
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [mockLinearIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: mockLinearIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1328,8 +1328,8 @@ describe("LinearIssueSection", () => {
 
   it("shows the comment input when an issue is linked", () => {
     // Linked issues should always have the comment input visible
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [mockLinearIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: mockLinearIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1341,8 +1341,8 @@ describe("LinearIssueSection", () => {
 
   it("shows unlink button for linked issue", () => {
     // Linked issues should have an unlink button
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [mockLinearIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: mockLinearIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1355,8 +1355,8 @@ describe("LinearIssueSection", () => {
   it("renders correct state pill for different state types", () => {
     // Verify linearStatePill produces correct labels for various state types
     const completedIssue = { ...mockLinearIssue, stateType: "completed", stateName: "Done" };
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [completedIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: completedIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1368,8 +1368,8 @@ describe("LinearIssueSection", () => {
 
   it("renders cancelled state pill", () => {
     const cancelledIssue = { ...mockLinearIssue, stateType: "cancelled", stateName: "Cancelled" };
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [cancelledIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: cancelledIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1381,8 +1381,8 @@ describe("LinearIssueSection", () => {
 
   it("renders unstarted state pill with correct label", () => {
     const unstartedIssue = { ...mockLinearIssue, stateType: "unstarted", stateName: "Todo" };
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [unstartedIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: unstartedIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1394,8 +1394,8 @@ describe("LinearIssueSection", () => {
 
   it("renders backlog state pill", () => {
     const backlogIssue = { ...mockLinearIssue, stateType: "backlog", stateName: "Backlog" };
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [backlogIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: backlogIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),
@@ -1407,8 +1407,8 @@ describe("LinearIssueSection", () => {
 
   it("links to the issue URL", () => {
     // The issue identifier should be a link to the Linear issue URL
-    mockApi.getLinkedLinearIssues.mockResolvedValue({
-      issues: [mockLinearIssue],
+    mockApi.getLinkedLinearIssue.mockResolvedValue({
+      issue: mockLinearIssue,
     });
     resetStore({
       sessions: new Map([["s1", { backend_type: "claude" }]]),

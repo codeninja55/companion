@@ -542,7 +542,7 @@ function LinearIssueItem({
 
   async function handleUnlink() {
     try {
-      await api.removeLinearIssue(sessionId, issue.id);
+      await api.unlinkLinearIssue(sessionId);
       useStore.getState().removeLinkedLinearIssue(sessionId, issue.id);
     } catch {
       // silent
@@ -698,9 +698,9 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
 
   // Load stored linked issues from server on mount
   useEffect(() => {
-    api.getLinkedLinearIssues(sessionId).then((data) => {
-      if (data.issues.length > 0) {
-        useStore.getState().setLinkedLinearIssues(sessionId, data.issues);
+    api.getLinkedLinearIssue(sessionId).then((data) => {
+      if (data.issue) {
+        useStore.getState().setLinkedLinearIssues(sessionId, [data.issue]);
       }
     }).catch(() => {});
   }, [sessionId]);
@@ -709,9 +709,9 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
   const fetchIssueDetails = useCallback(async () => {
     if (linkedIssues.length === 0) return;
     try {
-      const data = await api.getLinkedLinearIssues(sessionId, true);
-      if (data.issues.length > 0) {
-        useStore.getState().setLinkedLinearIssues(sessionId, data.issues);
+      const data = await api.getLinkedLinearIssue(sessionId, true);
+      if (data.issue) {
+        useStore.getState().setLinkedLinearIssues(sessionId, [data.issue]);
       }
     } catch {
       // silent
@@ -753,7 +753,7 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
 
   async function handleLinkIssue(issue: LinearIssue) {
     try {
-      await api.addLinearIssue(sessionId, issue);
+      await api.linkLinearIssue(sessionId, issue);
       useStore.getState().addLinkedLinearIssue(sessionId, issue);
       setShowSearch(false);
       setSearchQuery("");

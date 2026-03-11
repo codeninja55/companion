@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 vi.mock("./settings-manager.js", () => ({
-  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4.6",
+  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4-6",
   getSettings: vi.fn(),
 }));
 
@@ -15,7 +15,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(settingsManager.getSettings).mockReturnValue({
     anthropicApiKey: "sk-ant-key",
-    anthropicModel: "claude-sonnet-4.6",
+    anthropicModel: "claude-sonnet-4-6",
     linearApiKey: "",
     linearAutoTransition: false,
     linearAutoTransitionStateId: "",
@@ -23,11 +23,15 @@ beforeEach(() => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+    linearOAuthClientId: "",
+    linearOAuthClientSecret: "",
+    linearOAuthWebhookSecret: "",
+    linearOAuthAccessToken: "",
+    linearOAuthRefreshToken: "",
     editorTabEnabled: false,
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
-    defaultPermissionMode: "plan",
     publicUrl: "",
     updateChannel: "stable",
     updatedAt: 0,
@@ -51,7 +55,7 @@ describe("generateSessionTitle", () => {
   it("returns null when Anthropic key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -59,11 +63,15 @@ describe("generateSessionTitle", () => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
-      defaultPermissionMode: "plan",
       publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
@@ -102,11 +110,15 @@ describe("generateSessionTitle", () => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
-      defaultPermissionMode: "plan",
       publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
@@ -174,11 +186,15 @@ describe("generateSessionTitle", () => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
-      defaultPermissionMode: "plan",
       publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
@@ -192,7 +208,7 @@ describe("generateSessionTitle", () => {
 
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { model: string };
-    expect(body.model).toBe("claude-sonnet-4.6");
+    expect(body.model).toBe("claude-sonnet-4-6");
   });
 
   it("calls Anthropic endpoint with x-api-key and anthropic-version headers", async () => {

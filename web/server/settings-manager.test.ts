@@ -34,11 +34,15 @@ describe("settings-manager", () => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
-      defaultPermissionMode: "plan",
       publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
@@ -82,11 +86,15 @@ describe("settings-manager", () => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
-      defaultPermissionMode: "plan",
       publicUrl: "",
       updateChannel: "stable",
       updatedAt: 123,
@@ -98,6 +106,23 @@ describe("settings-manager", () => {
     _resetForTest(settingsPath);
 
     expect(getSettings().anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
+  });
+
+  // Migration: existing users with the old dot-form model ID should be auto-corrected
+  it("migrates persisted claude-sonnet-4.6 (dot) to claude-sonnet-4-6 (hyphen)", () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        anthropicApiKey: "sk-ant-existing",
+        anthropicModel: "claude-sonnet-4.6",
+      }),
+      "utf-8",
+    );
+    _resetForTest(settingsPath);
+
+    const settings = getSettings();
+    expect(settings.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
+    expect(settings.anthropicApiKey).toBe("sk-ant-existing");
   });
 
   it("updates only model while preserving existing key", () => {
@@ -137,11 +162,15 @@ describe("settings-manager", () => {
     linearArchiveTransition: false,
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
-      defaultPermissionMode: "plan",
       publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
@@ -149,11 +178,11 @@ describe("settings-manager", () => {
   });
 
   it("updates linear key without touching anthropic settings", () => {
-    updateSettings({ anthropicApiKey: "sk-ant-key", anthropicModel: "claude-sonnet-4.6" });
+    updateSettings({ anthropicApiKey: "sk-ant-key", anthropicModel: "claude-sonnet-4-6" });
     const updated = updateSettings({ linearApiKey: "lin_api_123" });
 
     expect(updated.anthropicApiKey).toBe("sk-ant-key");
-    expect(updated.anthropicModel).toBe("claude-sonnet-4.6");
+    expect(updated.anthropicModel).toBe("claude-sonnet-4-6");
     expect(updated.linearApiKey).toBe("lin_api_123");
   });
 
@@ -196,53 +225,6 @@ describe("settings-manager", () => {
     expect(updated.updateChannel).toBe("prerelease");
   });
 
-  // defaultPermissionMode tests
-  it("defaults defaultPermissionMode to plan when file is missing", () => {
-    expect(getSettings().defaultPermissionMode).toBe("plan");
-  });
-
-  it("updates defaultPermissionMode and persists", () => {
-    const updated = updateSettings({ defaultPermissionMode: "bypassPermissions" });
-    expect(updated.defaultPermissionMode).toBe("bypassPermissions");
-
-    // Verify round-trip: reload from disk
-    _resetForTest(settingsPath);
-    expect(getSettings().defaultPermissionMode).toBe("bypassPermissions");
-  });
-
-  it("accepts all valid defaultPermissionMode values", () => {
-    for (const mode of ["plan", "default", "acceptEdits", "bypassPermissions"] as const) {
-      updateSettings({ defaultPermissionMode: mode });
-      expect(getSettings().defaultPermissionMode).toBe(mode);
-    }
-  });
-
-  it("defaults defaultPermissionMode to plan for invalid values on disk", () => {
-    writeFileSync(
-      settingsPath,
-      JSON.stringify({ defaultPermissionMode: "invalid" }),
-      "utf-8",
-    );
-    _resetForTest(settingsPath);
-    expect(getSettings().defaultPermissionMode).toBe("plan");
-  });
-
-  it("defaults defaultPermissionMode to plan for non-string values on disk", () => {
-    writeFileSync(
-      settingsPath,
-      JSON.stringify({ defaultPermissionMode: 42 }),
-      "utf-8",
-    );
-    _resetForTest(settingsPath);
-    expect(getSettings().defaultPermissionMode).toBe("plan");
-  });
-
-  it("preserves defaultPermissionMode when updating other settings", () => {
-    updateSettings({ defaultPermissionMode: "acceptEdits" });
-    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
-    expect(updated.defaultPermissionMode).toBe("acceptEdits");
-  });
-
   // ─── publicUrl tests ────────────────────────────────────────────────────────
 
   // Default settings include publicUrl as empty string
@@ -271,7 +253,7 @@ describe("settings-manager", () => {
       settingsPath,
       JSON.stringify({
         anthropicApiKey: "key",
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
       }),
       "utf-8",
     );

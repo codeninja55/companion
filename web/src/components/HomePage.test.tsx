@@ -28,6 +28,7 @@ const { mockApi, createSessionStreamMock, mockStoreState, mockStoreGetState } = 
     transitionLinearIssue: vi.fn(),
     listPrompts: vi.fn(),
     listRemoteProfiles: vi.fn(),
+    listLinearConnections: vi.fn(),
   },
   createSessionStreamMock: vi.fn(),
   mockStoreState: {
@@ -148,6 +149,7 @@ describe("HomePage", () => {
     mockApi.gitFetch.mockResolvedValue({ ok: true });
     mockApi.listPrompts.mockResolvedValue([]);
     mockApi.listRemoteProfiles.mockResolvedValue([]);
+    mockApi.listLinearConnections.mockResolvedValue({ connections: [] });
   });
 
   it("auto-sets branch from selected mapped Linear issue", async () => {

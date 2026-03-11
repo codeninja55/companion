@@ -24,6 +24,8 @@ export interface StoredLinearIssue {
   teamId: string;
   assigneeName?: string;
   updatedAt?: string;
+  /** Which Linear connection this issue belongs to (for multi-connection support) */
+  connectionId?: string;
 }
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
@@ -87,6 +89,12 @@ function persist(): void {
 export function getLinearIssues(sessionId: string): StoredLinearIssue[] {
   ensureLoaded();
   return issues[sessionId] ?? [];
+}
+
+/** Return the first linked issue for a session (used by single-issue flows like archive). */
+export function getLinearIssue(sessionId: string): StoredLinearIssue | undefined {
+  ensureLoaded();
+  return issues[sessionId]?.[0];
 }
 
 /** Add an issue to a session. Deduplicates by issue ID (updates if exists). */

@@ -74,6 +74,11 @@ const SAMPLE_LIMITS = {
 // getCredentials
 // ===========================================================================
 describe("getCredentials", () => {
+  // These tests exercise the macOS Keychain path (execSync)
+  beforeEach(() => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+  });
+
   it("extracts token from plain JSON output", () => {
     mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
     expect(mod.getCredentials()).toBe(SAMPLE_TOKEN);
@@ -214,6 +219,11 @@ describe("fetchUsageLimits", () => {
 describe("getUsageLimits", () => {
   const EMPTY = { five_hour: null, seven_day: null, extra_usage: null };
 
+  // These tests exercise the macOS Keychain path (execSync)
+  beforeEach(() => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+  });
+
   it("returns empty when no credentials are available", async () => {
     mockExecSync.mockImplementation(() => {
       throw new Error("no keychain");
@@ -274,6 +284,11 @@ describe("getUsageLimits", () => {
 describe("clearUsageLimitsCache", () => {
   const EMPTY = { five_hour: null, seven_day: null, extra_usage: null };
 
+  // These tests exercise the macOS Keychain path (execSync)
+  beforeEach(() => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+  });
+
   it("forces next getUsageLimits call to re-fetch instead of using cache", async () => {
     // Populate the cache
     mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
@@ -327,6 +342,11 @@ describe("clearUsageLimitsCache", () => {
 // ===========================================================================
 describe("token refresh", () => {
   const EMPTY = { five_hour: null, seven_day: null, extra_usage: null };
+
+  // These tests exercise the macOS Keychain path (execSync / execFileSync)
+  beforeEach(() => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+  });
 
   it("refreshes an expired token and uses the new one", async () => {
     // Provide an expired token
@@ -398,6 +418,11 @@ describe("token refresh", () => {
 // getOAuthCredentials
 // ===========================================================================
 describe("getOAuthCredentials", () => {
+  // These tests exercise the macOS Keychain path (execSync / execFileSync)
+  beforeEach(() => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+  });
+
   it("returns access token and refresh token from valid credentials", async () => {
     mockExecSync.mockReturnValue(makeCredentialsJson(SAMPLE_TOKEN));
     const result = await mod.getOAuthCredentials();

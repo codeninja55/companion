@@ -30,8 +30,9 @@ import { registerProviderRoutes } from "./routes/provider-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerRemoteRoutes } from "./routes/remote-routes.js";
-import { registerChatWebhookRoutes, registerAgentChatWebhookRoutes, registerChatProtectedRoutes } from "./routes/chat-routes.js";
+import { registerLinearAgentWebhookRoute, registerLinearAgentProtectedRoutes } from "./routes/linear-agent-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
+import { discoverCommandsAndSkills } from "./commands-discovery.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerPushRoutes } from "./routes/push-routes.js";
 import { getPushManager } from "./push-manager.js";
@@ -41,6 +42,9 @@ import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
 import { registerMcpConfigRoutes } from "./routes/mcp-config-routes.js";
 import { registerAddDirsRoutes } from "./routes/add-dirs-routes.js";
+import { registerLinearConnectionRoutes } from "./routes/linear-connection-routes.js";
+import { getConnection, listConnections, resolveApiKey } from "./linear-connections.js";
+import { buildLinearSystemPrompt } from "./linear-prompt-builder.js";
 import { getSettings } from "./settings-manager.js";
 import * as mcpConfigManager from "./mcp-config-manager.js";
 import * as addDirsManager from "./add-dirs-manager.js";
@@ -70,8 +74,9 @@ export function createRoutes(
   recorder?: import("./recorder.js").RecorderManager,
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
   agentExecutor?: import("./agent-executor.js").AgentExecutor,
-  chatBot?: import("./chat-bot.js").ChatBot,
+  linearAgentBridge?: import("./linear-agent-bridge.js").LinearAgentBridge,
   port?: number,
+  clearAutoRelaunchCount?: (sessionId: string) => void,
 ) {
   const api = new Hono();
 
@@ -147,11 +152,10 @@ export function createRoutes(
     return c.json({ ok: false });
   });
 
-  // ─── Chat SDK webhook routes (exempt from auth middleware) ────────
-  // Platform adapters handle their own signature verification (e.g., Linear HMAC).
-  if (chatBot) {
-    registerChatWebhookRoutes(api, chatBot);          // legacy global (deprecated)
-    registerAgentChatWebhookRoutes(api, chatBot);     // agent-scoped webhooks
+  // ─── Linear Agent SDK webhook route (exempt from auth middleware) ────────
+  // Uses HMAC-SHA256 signature verification, not Companion auth tokens.
+  if (linearAgentBridge) {
+    registerLinearAgentWebhookRoute(api, linearAgentBridge);
   }
 
   // ─── Auth middleware (protects all routes below) ───────────────────
@@ -175,10 +179,8 @@ export function createRoutes(
     return next();
   });
 
-  // ─── Chat platform listing (protected, after auth middleware) ─────
-  if (chatBot) {
-    registerChatProtectedRoutes(api, chatBot);
-  }
+  // ─── Linear Agent SDK protected routes (status, authorize URL, disconnect) ─────
+  registerLinearAgentProtectedRoutes(api);
 
   // ─── Auth management (protected) ──────────────────────────────────
 
@@ -236,6 +238,16 @@ export function createRoutes(
           envVars = { ...envVars, ...providerEnv };
         } else {
           console.warn(`[routes] Provider "${providerSlug}" not found, ignoring`);
+        }
+      }
+
+      // Inject LINEAR_API_KEY if a Linear connection is specified
+      let linearSystemPrompt: string | undefined;
+      if (body.linearConnectionId) {
+        const conn = getConnection(body.linearConnectionId);
+        if (conn?.apiKey) {
+          envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
+          linearSystemPrompt = buildLinearSystemPrompt(conn, body.linearIssue);
         }
       }
 
@@ -441,7 +453,7 @@ export function createRoutes(
         }
       }
 
-      const effectivePermissionMode = body.permissionMode || getSettings().defaultPermissionMode;
+      const effectivePermissionMode = body.permissionMode;
 
       // Resolve additional directories from preset slug and/or ad-hoc list
       let addDirs: string[] | undefined;
@@ -482,6 +494,7 @@ export function createRoutes(
         mcpConfigSlug: body.mcpConfigSlug,
         allowDangerousPermissions: body.allowDangerousPermissions === true,
         addDirs,
+        systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
       });
 
       // Persist MCP/addDirs/dangerous flags in session info
@@ -510,6 +523,16 @@ export function createRoutes(
           createdAt: Date.now(),
         });
       }
+
+      // Inject Linear context into the CLI's system prompt (must happen before first user message)
+      if (linearSystemPrompt && backend === "claude") {
+        wsBridge.injectSystemPrompt(session.sessionId, linearSystemPrompt);
+      }
+
+      // Pre-populate slash commands and skills from filesystem so the slash
+      // menu works before system.init arrives from the CLI
+      const discovered = await discoverCommandsAndSkills(cwd).catch(() => ({ slash_commands: [] as string[], skills: [] as string[] }));
+      wsBridge.prePopulateCommands(session.sessionId, discovered.slash_commands, discovered.skills);
 
       return c.json(session);
     } catch (e: unknown) {
@@ -570,6 +593,16 @@ export function createRoutes(
           const providerEnv = providerManager.resolveProviderEnv(providerSlug!, providerModel);
           if (providerEnv) {
             envVars = { ...envVars, ...providerEnv };
+          }
+        }
+
+        // Inject LINEAR_API_KEY if a Linear connection is specified
+        let linearSystemPrompt: string | undefined;
+        if (body.linearConnectionId) {
+          const conn = getConnection(body.linearConnectionId);
+          if (conn?.apiKey) {
+            envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
+            linearSystemPrompt = buildLinearSystemPrompt(conn, body.linearIssue);
           }
         }
 
@@ -858,7 +891,7 @@ export function createRoutes(
         // --- Step: Launch CLI ---
         await emitProgress(stream, "launching_cli", "Launching Claude Code...", "in_progress");
 
-        const effectivePermissionMode = body.permissionMode || getSettings().defaultPermissionMode;
+        const effectivePermissionMode = body.permissionMode;
 
         // Resolve additional directories from preset slug and/or ad-hoc list
         let addDirs: string[] | undefined;
@@ -899,6 +932,7 @@ export function createRoutes(
           mcpConfigSlug: body.mcpConfigSlug,
           allowDangerousPermissions: body.allowDangerousPermissions === true,
           addDirs,
+          systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
         });
 
         // Persist MCP/addDirs/dangerous flags in session info
@@ -926,6 +960,16 @@ export function createRoutes(
             createdAt: Date.now(),
           });
         }
+
+        // Inject Linear context into the CLI's system prompt (must happen before first user message)
+        if (linearSystemPrompt && backend === "claude") {
+          wsBridge.injectSystemPrompt(session.sessionId, linearSystemPrompt);
+        }
+
+        // Pre-populate slash commands and skills from filesystem so the slash
+        // menu works before system.init arrives from the CLI
+        const discovered = await discoverCommandsAndSkills(cwd).catch(() => ({ slash_commands: [] as string[], skills: [] as string[] }));
+        wsBridge.prePopulateCommands(session.sessionId, discovered.slash_commands, discovered.skills);
 
         await emitProgress(stream, "launching_cli", "Session started", "done");
 
@@ -1182,6 +1226,7 @@ export function createRoutes(
 
   api.post("/sessions/:id/relaunch", async (c) => {
     const id = c.req.param("id");
+    clearAutoRelaunchCount?.(id);
     const result = await launcher.relaunch(id);
     if (!result.ok) {
       const status = result.error?.includes("not found") || result.error?.includes("Session not found") ? 404 : 503;
@@ -1538,31 +1583,35 @@ export function createRoutes(
       });
     }
 
-    // At least one issue is not done — check if backlog state is available
-    const settings = getSettings();
-    const linearApiKey = settings.linearApiKey.trim();
+    // Issue is not done — check if backlog state is available and if archive transition is configured
+    const linkedIssue = linkedIssues[0];
+    const resolved = resolveApiKey(linkedIssue.connectionId);
     let hasBacklogState = false;
-    if (linearApiKey) {
-      const teamIds = new Set(linkedIssues.map((i) => i.teamId).filter(Boolean));
-      if (teamIds.size > 0) {
-        const teams = await fetchLinearTeamStates(linearApiKey);
-        for (const tid of teamIds) {
-          const team = teams.find((t) => t.id === tid);
-          if (team?.states.some((s) => s.type === "backlog")) {
-            hasBacklogState = true;
-            break;
-          }
-        }
+    if (resolved && linkedIssue.teamId) {
+      const teams = await fetchLinearTeamStates(resolved.apiKey);
+      const team = teams.find((t) => t.id === linkedIssue.teamId);
+      if (team) {
+        hasBacklogState = team.states.some((s) => s.type === "backlog");
       }
     }
+
+    // Use connection-level archive settings if available, fall back to global settings
+    const settings = getSettings();
+    const conn = resolved && resolved.connectionId !== "legacy" ? getConnection(resolved.connectionId) : null;
+    const archiveTransitionConfigured = conn
+      ? conn.archiveTransition && !!conn.archiveTransitionStateId.trim()
+      : settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim();
+    const archiveTransitionStateName = conn
+      ? conn.archiveTransitionStateName || undefined
+      : settings.linearArchiveTransitionStateName || undefined;
 
     return c.json({
       hasLinkedIssues: true,
       issueNotDone: true,
       issues,
       hasBacklogState,
-      archiveTransitionConfigured: settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim(),
-      archiveTransitionStateName: settings.linearArchiveTransitionStateName || undefined,
+      archiveTransitionConfigured,
+      archiveTransitionStateName,
     });
   });
 
@@ -1572,43 +1621,38 @@ export function createRoutes(
 
     // ─── Best-effort Linear transition before archive ─────────────────
     type TransitionResult = { ok: boolean; skipped?: boolean; error?: string; issue?: { id: string; identifier: string; stateName: string; stateType: string } };
-    let linearTransitionResults: TransitionResult[] | undefined;
+    let linearTransitionResult: TransitionResult | undefined;
     const linearTransition = body.linearTransition as string | undefined;
 
     if (linearTransition && linearTransition !== "none") {
-      const linkedIssues = sessionLinearIssues.getLinearIssues(id);
-      if (linkedIssues.length > 0) {
-        const settings = getSettings();
-        const linearApiKey = settings.linearApiKey.trim();
-        if (linearApiKey) {
-          linearTransitionResults = [];
-          // Pre-fetch team states once for backlog resolution
-          let teams: Awaited<ReturnType<typeof fetchLinearTeamStates>> | null = null;
-          if (linearTransition === "backlog") {
-            teams = await fetchLinearTeamStates(linearApiKey);
+      const linkedIssue = sessionLinearIssues.getLinearIssue(id);
+      if (linkedIssue) {
+        const resolved = resolveApiKey(linkedIssue.connectionId);
+        if (resolved) {
+          const { apiKey: linearApiKey, connectionId: resolvedConnId } = resolved;
+          const settings = getSettings();
+          // Use connection-level archive settings if available, else fall back to global
+          const conn = resolvedConnId !== "legacy" ? getConnection(resolvedConnId) : null;
+          let targetStateId = "";
+
+          if (linearTransition === "backlog" && linkedIssue.teamId) {
+            // Resolve backlog state for the issue's team
+            const teams = await fetchLinearTeamStates(linearApiKey);
+            const team = teams.find((t) => t.id === linkedIssue.teamId);
+            const backlogState = team?.states.find((s) => s.type === "backlog");
+            if (backlogState) {
+              targetStateId = backlogState.id;
+            }
+          } else if (linearTransition === "configured") {
+            const archiveStateId = conn ? conn.archiveTransitionStateId : settings.linearArchiveTransitionStateId;
+            targetStateId = archiveStateId.trim();
           }
 
-          for (const issue of linkedIssues) {
-            let targetStateId = "";
-
-            if (linearTransition === "backlog" && issue.teamId && teams) {
-              const team = teams.find((t) => t.id === issue.teamId);
-              const backlogState = team?.states.find((s) => s.type === "backlog");
-              if (backlogState) {
-                targetStateId = backlogState.id;
-              }
-            } else if (linearTransition === "configured") {
-              targetStateId = settings.linearArchiveTransitionStateId.trim();
-            }
-
-            if (targetStateId) {
-              try {
-                linearTransitionResults.push(await transitionLinearIssue(issue.id, targetStateId, linearApiKey));
-              } catch {
-                linearTransitionResults.push({ ok: false, error: "Transition failed unexpectedly" });
-              }
-            } else {
-              linearTransitionResults.push({ ok: true, skipped: true });
+          if (targetStateId) {
+            try {
+              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey, resolvedConnId);
+            } catch {
+              linearTransitionResult = { ok: false, error: "Transition failed unexpectedly" };
             }
           }
         }
@@ -1627,7 +1671,7 @@ export function createRoutes(
     const worktreeResult = cleanupWorktree(id, body.force);
     launcher.setArchived(id, true);
     sessionStore.setArchived(id, true);
-    return c.json({ ok: true, worktree: worktreeResult, linearTransitions: linearTransitionResults });
+    return c.json({ ok: true, worktree: worktreeResult, linearTransition: linearTransitionResult });
   });
 
   api.post("/sessions/:id/unarchive", (c) => {
@@ -1762,6 +1806,7 @@ export function createRoutes(
   // ─── Linear ────────────────────────────────────────────────────────
 
   registerLinearRoutes(api);
+  registerLinearConnectionRoutes(api);
 
   registerGitRoutes(api, prPoller);
   registerSystemRoutes(api, {
@@ -1774,7 +1819,7 @@ export function createRoutes(
   registerPushRoutes(api, getPushManager());
   registerSkillRoutes(api);
   registerCronRoutes(api, cronScheduler);
-  registerAgentRoutes(api, agentExecutor, chatBot);
+  registerAgentRoutes(api, agentExecutor);
   registerRemoteRoutes(api);
   registerMcpConfigRoutes(api);
   registerAddDirsRoutes(api);

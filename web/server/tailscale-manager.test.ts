@@ -23,7 +23,7 @@ vi.mock("./settings-manager.js", () => ({
 
 // Queue of results for successive spawn calls. Each entry is either
 // { stdout, code } for success or { stderr, code } for failure.
-type SpawnResult = { stdout?: string; stderr?: string; code: number };
+type SpawnResult = { stdout?: string; stderr?: string; code: number | null; signal?: string };
 let spawnQueue: SpawnResult[] = [];
 
 /**
@@ -48,7 +48,7 @@ function mockSpawnImpl() {
     if (result.stderr !== undefined) {
       stderrEmitter.emit("data", Buffer.from(result.stderr));
     }
-    proc.emit("close", result.code);
+    proc.emit("close", result.code, result.signal ?? null);
   });
 
   return proc;
@@ -120,6 +120,11 @@ function enqueueSpawnSuccess(stdout: string) {
 /** Helper to enqueue a failed spawn result */
 function enqueueSpawnFailure(stderr: string, code = 1) {
   spawnQueue.push({ stderr, code });
+}
+
+/** Helper to enqueue a signal-killed spawn result (code is null when killed by signal) */
+function enqueueSpawnSignalKill(signal: string, stderr = "") {
+  spawnQueue.push({ stderr, code: null, signal });
 }
 
 beforeEach(() => {
@@ -388,6 +393,31 @@ describe("startFunnel", () => {
     expect(result.funnelActive).toBe(true);
     expect(result.funnelUrl).toBe("https://my-machine.tail1234.ts.net");
     expect(result.warning).toBeUndefined();
+  });
+
+  it("includes signal name when funnel process is killed by a signal", async () => {
+    mockResolveBinary.mockReturnValue("/usr/bin/tailscale");
+    enqueueSpawnSuccess(CONNECTED_STATUS_JSON);
+    // Funnel command killed by SIGTERM (e.g. timeout)
+    enqueueSpawnSignalKill("SIGTERM");
+
+    const result = await startFunnel(3456);
+
+    expect(result.error).toContain("killed by signal SIGTERM");
+    expect(result.error).toContain("timeout");
+    expect(result.funnelActive).toBe(false);
+  });
+
+  it("includes both stderr and signal when process is killed with output", async () => {
+    mockResolveBinary.mockReturnValue("/usr/bin/tailscale");
+    enqueueSpawnSuccess(CONNECTED_STATUS_JSON);
+    // Funnel command produces stderr then gets killed
+    enqueueSpawnSignalKill("SIGTERM", "cert provisioning in progress");
+
+    const result = await startFunnel(3456);
+
+    expect(result.error).toContain("cert provisioning in progress");
+    expect(result.error).toContain("killed by signal SIGTERM");
   });
 
   it("constructs URL from DNS name when serve status is empty", async () => {

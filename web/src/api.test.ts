@@ -299,7 +299,7 @@ describe("updateEnv", () => {
 // ===========================================================================
 describe("settings", () => {
   it("sends GET to /api/settings", async () => {
-    const settings = { anthropicApiKeyConfigured: true, anthropicModel: "claude-sonnet-4.6", linearApiKeyConfigured: false };
+    const settings = { anthropicApiKeyConfigured: true, anthropicModel: "claude-sonnet-4-6", linearApiKeyConfigured: false };
     mockFetch.mockResolvedValueOnce(mockResponse(settings));
 
     const result = await api.getSettings();
@@ -310,7 +310,7 @@ describe("settings", () => {
   });
 
   it("sends PUT to /api/settings", async () => {
-    const settings = { anthropicApiKeyConfigured: true, anthropicModel: "claude-sonnet-4.6", linearApiKeyConfigured: true };
+    const settings = { anthropicApiKeyConfigured: true, anthropicModel: "claude-sonnet-4-6", linearApiKeyConfigured: true };
     mockFetch.mockResolvedValueOnce(mockResponse(settings));
 
     await api.updateSettings({ anthropicApiKey: "sk-ant-key", linearApiKey: "lin_api_123" });
@@ -925,56 +925,45 @@ describe("Linear issue-session linking", () => {
     teamId: "t1",
   };
 
-  it("addLinearIssue sends POST with issue body", async () => {
+  it("linkLinearIssue sends PUT with issue body", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
 
-    await api.addLinearIssue("sess-1", mockIssue);
+    await api.linkLinearIssue("sess-1", mockIssue);
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issues");
-    expect(opts.method).toBe("POST");
+    expect(url).toBe("/api/sessions/sess-1/linear-issue");
+    expect(opts.method).toBe("PUT");
     expect(JSON.parse(opts.body)).toEqual(mockIssue);
   });
 
-  it("removeLinearIssue sends DELETE with issueId", async () => {
+  it("unlinkLinearIssue sends DELETE", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
 
-    await api.removeLinearIssue("sess-1", "iss-1");
+    await api.unlinkLinearIssue("sess-1");
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issues");
-    expect(opts.method).toBe("DELETE");
-    expect(JSON.parse(opts.body)).toEqual({ issueId: "iss-1" });
-  });
-
-  it("removeAllLinearIssues sends DELETE without body", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
-
-    await api.removeAllLinearIssues("sess-1");
-
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issues");
+    expect(url).toBe("/api/sessions/sess-1/linear-issue");
     expect(opts.method).toBe("DELETE");
   });
 
-  it("getLinkedLinearIssues sends GET without refresh by default", async () => {
-    const data = { issues: [mockIssue] };
+  it("getLinkedLinearIssue sends GET without refresh by default", async () => {
+    const data = { issue: mockIssue };
     mockFetch.mockResolvedValueOnce(mockResponse(data));
 
-    const result = await api.getLinkedLinearIssues("sess-1");
+    const result = await api.getLinkedLinearIssue("sess-1");
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issues");
+    expect(url).toBe("/api/sessions/sess-1/linear-issue");
     expect(result).toEqual(data);
   });
 
-  it("getLinkedLinearIssues sends GET with refresh=true", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ issues: [] }));
+  it("getLinkedLinearIssue sends GET with refresh=true", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ issue: null }));
 
-    await api.getLinkedLinearIssues("sess-1", true);
+    await api.getLinkedLinearIssue("sess-1", true);
 
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/sessions/sess-1/linear-issues?refresh=true");
+    expect(url).toBe("/api/sessions/sess-1/linear-issue?refresh=true");
   });
 
   it("addLinearComment sends POST with body text", async () => {

@@ -3,12 +3,6 @@ import { api } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 import { navigateToSession, navigateHome } from "../utils/routing.js";
-import {
-  isPushSupported,
-  isPushSubscribed,
-  registerPushSubscription,
-  unregisterPushSubscription,
-} from "../utils/push-notifications.js";
 
 interface SettingsPageProps {
   embedded?: boolean;
@@ -30,7 +24,7 @@ type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
-  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4.6");
+  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-6");
   const [editorTabEnabled, setEditorTabEnabled] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -49,10 +43,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const setUpdateInfo = useStore((s) => s.setUpdateInfo);
   const setUpdateOverlayActive = useStore((s) => s.setUpdateOverlayActive);
   const setStoreEditorTabEnabled = useStore((s) => s.setEditorTabEnabled);
-  const pushEnabled = useStore((s) => s.pushNotificationsEnabled);
-  const setPushEnabled = useStore((s) => s.setPushNotificationsEnabled);
-  const [pushSupported] = useState(() => isPushSupported());
-  const [pushToggling, setPushToggling] = useState(false);
   const notificationApiAvailable = typeof Notification !== "undefined";
   const [updateChannel, setUpdateChannel] = useState<"stable" | "prerelease">("stable");
   const [checkingUpdates, setCheckingUpdates] = useState(false);
@@ -63,7 +53,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [aiValidationEnabled, setAiValidationEnabled] = useState(false);
   const [aiValidationAutoApprove, setAiValidationAutoApprove] = useState(true);
   const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(true);
-  const [defaultPermissionMode, setDefaultPermissionMode] = useState("plan");
   const [publicUrl, setPublicUrl] = useState("");
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
@@ -130,14 +119,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       .getSettings()
       .then((s) => {
         setConfigured(s.anthropicApiKeyConfigured);
-        setAnthropicModel(s.anthropicModel || "claude-sonnet-4.6");
+        setAnthropicModel(s.anthropicModel || "claude-sonnet-4-6");
         setEditorTabEnabled(s.editorTabEnabled);
         setStoreEditorTabEnabled(s.editorTabEnabled);
         if (typeof s.aiValidationEnabled === "boolean") setAiValidationEnabled(s.aiValidationEnabled);
         if (typeof s.aiValidationAutoApprove === "boolean") setAiValidationAutoApprove(s.aiValidationAutoApprove);
         if (typeof s.aiValidationAutoDeny === "boolean") setAiValidationAutoDeny(s.aiValidationAutoDeny);
         if (s.updateChannel === "stable" || s.updateChannel === "prerelease") setUpdateChannel(s.updateChannel);
-        if (s.defaultPermissionMode) setDefaultPermissionMode(s.defaultPermissionMode);
         if (typeof s.publicUrl === "string") {
           setPublicUrl(s.publicUrl);
           useStore.getState().setPublicUrl(s.publicUrl);
@@ -148,13 +136,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
     // Fetch auth token in parallel (non-blocking)
     api.getAuthToken().then((res) => setAuthToken(res.token)).catch(() => {});
-
-    // Sync push subscription state with browser
-    if (pushSupported) {
-      isPushSubscribed().then((subscribed) => {
-        if (subscribed !== pushEnabled) setPushEnabled(subscribed);
-      });
-    }
   }, []);
 
   async function onSave(e: React.FormEvent) {
@@ -165,7 +146,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     try {
       const nextKey = anthropicApiKey.trim();
       const payload: { anthropicApiKey?: string; anthropicModel: string; editorTabEnabled: boolean } = {
-        anthropicModel: anthropicModel.trim() || "claude-sonnet-4.6",
+        anthropicModel: anthropicModel.trim() || "claude-sonnet-4-6",
         editorTabEnabled,
       };
       if (nextKey) {
@@ -358,29 +339,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </button>
                 <p className="text-xs text-cc-muted px-1">
                   Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
-                </p>
-
-                <div className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg">
-                  <span>Default permission mode</span>
-                  <select
-                    value={defaultPermissionMode}
-                    onChange={async (e) => {
-                      const value = e.target.value;
-                      setDefaultPermissionMode(value);
-                      try {
-                        await api.updateSettings({ defaultPermissionMode: value } as Record<string, unknown>);
-                      } catch { /* ignore */ }
-                    }}
-                    className="text-xs bg-transparent text-cc-fg border-none outline-none cursor-pointer"
-                  >
-                    <option value="plan">Plan</option>
-                    <option value="default">Default</option>
-                    <option value="acceptEdits">Accept edits</option>
-                    <option value="bypassPermissions">Bypass permissions</option>
-                  </select>
-                </div>
-                <p className="text-xs text-cc-muted px-1">
-                  The permission mode pre-selected when creating sessions. Can be overridden per session.
                 </p>
               </div>
             </section>
@@ -627,43 +585,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     <span className="text-xs text-cc-muted">{notificationDesktop ? "On" : "Off"}</span>
                   </button>
                 )}
-                {pushSupported && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={pushToggling}
-                      onClick={async () => {
-                        setPushToggling(true);
-                        try {
-                          if (!pushEnabled) {
-                            const res = await fetch("/api/push/vapid-key");
-                            const { publicKey } = await res.json();
-                            const ok = await registerPushSubscription(publicKey);
-                            if (ok) setPushEnabled(true);
-                          } else {
-                            const ok = await unregisterPushSubscription();
-                            if (ok) setPushEnabled(false);
-                          }
-                        } finally {
-                          setPushToggling(false);
-                        }
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${
-                        pushToggling
-                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                          : "bg-cc-hover text-cc-fg hover:bg-cc-active cursor-pointer"
-                      }`}
-                    >
-                      <span>Push Notifications</span>
-                      <span className="text-xs text-cc-muted">
-                        {pushToggling ? "..." : pushEnabled ? "On" : "Off"}
-                      </span>
-                    </button>
-                    <p className="text-xs text-cc-muted px-1">
-                      Receive notifications when sessions complete, even when the browser tab is closed.
-                    </p>
-                  </>
-                )}
               </div>
             </section>
 
@@ -699,7 +620,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     type="text"
                     value={anthropicModel}
                     onChange={(e) => setAnthropicModel(e.target.value)}
-                    placeholder="claude-sonnet-4.6"
+                    placeholder="claude-sonnet-4-6"
                     className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
                   />
                 </div>
@@ -1008,7 +929,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </button>
               </div>
             </section>
-
           </div>
         </div>
       </div>

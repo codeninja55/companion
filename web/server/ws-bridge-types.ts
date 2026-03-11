@@ -50,8 +50,12 @@ export interface Session {
   lastAckSeq: number;
   processedClientMessageIds: string[];
   processedClientMessageIdSet: Set<string>;
-  /** Accumulated thinking text from stream_event thinking_delta, used to patch
-   *  bogus `<think>` thinking blocks from local models (Qwen, DeepSeek). */
+  /** Rolling set of recent CLI message hashes for deduplication on WS reconnect */
+  recentCLIMessageHashes: string[];
+  recentCLIMessageHashSet: Set<string>;
+  /** Timestamp of last non-keepalive CLI message (for idle detection) */
+  lastCliActivityTs: number;
+  /** Accumulated streamed thinking content for the current assistant turn */
   streamedThinking: string;
 }
 

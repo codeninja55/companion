@@ -113,6 +113,7 @@ export function HomePage() {
   const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
   const [linearConfigured, setLinearConfigured] = useState(false);
   const [selectedLinearIssues, setSelectedLinearIssues] = useState<LinearIssue[]>([]);
+  const [selectedLinearConnectionId, setSelectedLinearConnectionId] = useState<string | null>(null);
 
   const MODELS = dynamicModels || getModelsForBackend(backend);
   const MODES = getModesForBackend(backend);
@@ -679,6 +680,14 @@ export function HomePage() {
           allowDangerousPermissions: allowDangerousPermissions || undefined,
           addDirsSlug: selectedAddDirsPreset || undefined,
           addDirs: additionalDirs.length > 0 ? additionalDirs : undefined,
+          linearConnectionId: selectedLinearIssues.length > 0 ? (selectedLinearConnectionId || undefined) : undefined,
+          linearIssue: selectedLinearIssues.length > 0 ? {
+            identifier: selectedLinearIssues[0].identifier,
+            title: selectedLinearIssues[0].title,
+            stateName: selectedLinearIssues[0].stateName,
+            teamName: selectedLinearIssues[0].teamName,
+            url: selectedLinearIssues[0].url,
+          } : undefined,
         },
         (progress) => {
           useStore.getState().addCreationProgress(progress);
@@ -753,12 +762,12 @@ export function HomePage() {
       // Auto-link Linear issues if any were selected
       if (selectedLinearIssues.length > 0) {
         for (const issue of selectedLinearIssues) {
-          api.addLinearIssue(sessionId, issue)
+          api.linkLinearIssue(sessionId, issue, selectedLinearConnectionId || undefined)
             .then(() => useStore.getState().addLinkedLinearIssue(sessionId, issue))
             .catch(() => { /* fire-and-forget: linking is best-effort */ });
         }
         // Fire-and-forget: transition the first issue to configured status
-        api.transitionLinearIssue(selectedLinearIssues[0].id).catch(() => {
+        api.transitionLinearIssue(selectedLinearIssues[0].id, selectedLinearConnectionId || undefined).catch(() => {
           /* fire-and-forget: status transition is best-effort */
         });
       }
@@ -1714,6 +1723,7 @@ export function HomePage() {
             selectedLinearIssues={selectedLinearIssues}
             onIssuesChange={handleIssueSelect}
             onBranchFromIssue={handleBranchFromIssue}
+            onConnectionSelect={setSelectedLinearConnectionId}
           />
         </div>
 

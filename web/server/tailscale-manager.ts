@@ -49,6 +49,7 @@ interface PersistedFunnelState {
 
 const STATE_PATH = join(homedir(), ".companion", "tailscale-state.json");
 const CMD_TIMEOUT = 15_000;
+const FUNNEL_CMD_TIMEOUT = 60_000; // 60s — cert provisioning + DNS registration can be slow
 const BINARY_CACHE_TTL = 60_000; // 1 minute — allows detecting install/uninstall without restart
 
 let cachedBinaryPath: string | null | undefined; // undefined = not yet checked
@@ -69,11 +70,11 @@ function findBinary(): string | null {
  * Run a command asynchronously using spawn with explicit argument array
  * (no shell interpolation — eliminates command injection).
  */
-function execAsync(binary: string, args: string[]): Promise<string> {
+function execAsync(binary: string, args: string[], timeout = CMD_TIMEOUT): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn(binary, args, {
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: CMD_TIMEOUT,
+      timeout,
     });
 
     let stdout = "";
@@ -83,11 +84,15 @@ function execAsync(binary: string, args: string[]): Promise<string> {
     proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
 
     proc.on("error", (err) => reject(err));
-    proc.on("close", (code) => {
+    proc.on("close", (code, signal) => {
       if (code === 0) {
         resolve(stdout.trim());
       } else {
-        reject(new Error(stderr.trim() || `Process exited with code ${code}`));
+        const parts: string[] = [];
+        if (stderr.trim()) parts.push(stderr.trim());
+        if (signal) parts.push(`killed by signal ${signal}`);
+        if (code !== null) parts.push(`exit code ${code}`);
+        reject(new Error(parts.join(" — ") || `Process exited with code ${code}`));
       }
     });
   });
@@ -297,16 +302,20 @@ export async function startFunnel(port: number): Promise<TailscaleStatus> {
   }
 
   try {
-    await execAsync(binary, ["funnel", "--bg", String(port)]);
+    await execAsync(binary, ["funnel", "--bg", String(port)], FUNNEL_CMD_TIMEOUT);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const isPermissionError = process.platform === "linux" && /permission|sudo|access denied/i.test(message);
+    const isSignalKill = /killed by signal/i.test(message);
+    const detail = isSignalKill
+      ? `${message}. This may be a timeout — first-time certificate provisioning can take over a minute. Try again.`
+      : message;
     return {
       installed: true, binaryPath: binary, connected: true, dnsName,
       funnelActive: false, funnelUrl: null,
       error: isPermissionError
         ? "Tailscale requires operator mode on Linux to manage Funnel."
-        : `Failed to start Funnel: ${message}`,
+        : `Failed to start Funnel: ${detail}`,
       ...(isPermissionError && { needsOperatorMode: true }),
     };
   }
@@ -351,7 +360,7 @@ export async function stopFunnel(port: number): Promise<TailscaleStatus> {
   const previousUrl = persisted?.funnelUrl ?? null;
 
   try {
-    await execAsync(binary, ["funnel", String(port), "off"]);
+    await execAsync(binary, ["funnel", String(port), "off"], FUNNEL_CMD_TIMEOUT);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     // Re-query actual state — funnel is likely still running after a failed stop
