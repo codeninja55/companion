@@ -539,6 +539,14 @@ export class CodexAdapter {
    * event to this method so the adapter can clean up and fire disconnectCb.
    */
   handleTransportClose(): void {
+    this.cleanupAndDisconnect();
+  }
+
+  /**
+   * Clear pending timers, mark disconnected, and fire the disconnect callback.
+   * Shared by handleTransportClose, RPC timeout paths, and process exit handlers.
+   */
+  private cleanupAndDisconnect(): void {
     this.connected = false;
     for (const pending of this.pendingDynamicToolCalls.values()) {
       clearTimeout(pending.timeout);
@@ -764,14 +772,35 @@ export class CodexAdapter {
 
         try {
           if (this.options.threadId) {
-            const resumeResult = await this.transport.call("thread/resume", {
-              threadId: this.options.threadId,
-              model: this.options.model,
-              cwd: this.getExecutionCwd(),
-              approvalPolicy: this.mapApprovalPolicy(this.currentPermissionMode),
-              sandbox: this.options.sandbox || this.mapSandboxPolicy(this.currentPermissionMode),
-            }) as { thread: { id: string } };
-            this.threadId = resumeResult.thread.id;
+            try {
+              const resumeResult = await this.transport.call("thread/resume", {
+                threadId: this.options.threadId,
+                model: this.options.model,
+                cwd: this.getExecutionCwd(),
+                approvalPolicy: this.mapApprovalPolicy(this.currentPermissionMode),
+                sandbox: this.options.sandbox || this.mapSandboxPolicy(this.currentPermissionMode),
+              }) as { thread: { id: string } };
+              this.threadId = resumeResult.thread.id;
+            } catch (resumeErr) {
+              // If resume fails with a non-transient error (e.g. "no rollout found"),
+              // fall back to starting a fresh thread instead of failing entirely.
+              const isTransport = resumeErr instanceof Error && resumeErr.message === "Transport closed";
+              if (isTransport) throw resumeErr; // Let outer retry handle transient errors
+              console.warn(
+                `[codex-adapter] thread/resume failed for ${this.sessionId} (threadId=${this.options.threadId}), falling back to thread/start: ${resumeErr instanceof Error ? resumeErr.message : String(resumeErr)}`,
+              );
+              const freshResult = await this.transport.call("thread/start", {
+                model: this.options.model,
+                cwd: this.getExecutionCwd(),
+                approvalPolicy: this.mapApprovalPolicy(this.currentPermissionMode),
+                sandbox: this.options.sandbox || this.mapSandboxPolicy(this.currentPermissionMode),
+                ...(this.options.systemPrompt ? { instructions: this.options.systemPrompt } : {}),
+              }) as { thread: { id: string } };
+              this.threadId = freshResult.thread.id;
+              // Update options.threadId so subsequent resetForReconnect calls
+              // attempt to resume this new thread, not the original stale one.
+              this.options.threadId = freshResult.thread.id;
+            }
           } else {
             const threadResult = await this.transport.call("thread/start", {
               model: this.options.model,
@@ -911,9 +940,11 @@ export class CodexAdapter {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.startsWith("RPC timeout")) {
-        this.emit({ type: "error", message: "Codex is not responding. Try relaunching the session." });
+        this.emit({ type: "error", message: "Codex is not responding. Relaunching session..." });
+        this.cleanupAndDisconnect();
       } else if (errMsg === "Transport closed") {
-        this.emit({ type: "error", message: "Connection to Codex lost. Try relaunching the session." });
+        this.emit({ type: "error", message: "Connection to Codex lost. Relaunching session..." });
+        this.cleanupAndDisconnect();
       } else {
         this.emit({ type: "error", message: `Failed to start turn: ${err}` });
       }
@@ -1019,7 +1050,8 @@ export class CodexAdapter {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.startsWith("RPC timeout")) {
-        this.emit({ type: "error", message: "Codex is not responding to interrupt. Try relaunching the session." });
+        this.emit({ type: "error", message: "Codex is not responding to interrupt. Relaunching session..." });
+        this.cleanupAndDisconnect();
       } else {
         console.warn("[codex-adapter] Interrupt failed:", err);
       }

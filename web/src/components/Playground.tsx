@@ -3693,7 +3693,7 @@ function PlaygroundAiValidationToggle({ enabled }: { enabled: boolean }) {
       total_lines_removed: 0,
       aiValidationEnabled: enabled,
       aiValidationAutoApprove: true,
-      aiValidationAutoDeny: true,
+      aiValidationAutoDeny: false,
       ...prev,
     });
     return () => {

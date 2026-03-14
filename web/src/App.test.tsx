@@ -252,15 +252,16 @@ describe("App", () => {
       setStoreValues({ isAuthenticated: true });
     });
 
-    it("renders Sidebar, TopBar, UpdateBanner, and HomePage when on home route with no session", () => {
+    it("renders Sidebar, TopBar, and HomePage when on home route with no session", () => {
       // Authenticated user on the home route (no active session) should see the
-      // full chrome: sidebar, topbar, update banner, and the home page content.
+      // full chrome: sidebar, topbar, and the home page content.
+      // Update banner is disabled in this fork (does not track upstream releases).
       render(<App />);
 
       expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
       expect(screen.getByTestId("sidebar")).toBeInTheDocument();
       expect(screen.getByTestId("topbar")).toBeInTheDocument();
-      expect(screen.getByTestId("update-banner")).toBeInTheDocument();
+      expect(screen.queryByTestId("update-banner")).not.toBeInTheDocument();
       expect(screen.getByTestId("home-page")).toBeInTheDocument();
       expect(screen.getByTestId("update-overlay")).toBeInTheDocument();
     });

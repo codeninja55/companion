@@ -11,7 +11,8 @@ import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
 import { DiffPanel } from "./components/DiffPanel.js";
-import { UpdateBanner } from "./components/UpdateBanner.js";
+// Update banner disabled — fork does not track upstream releases
+// import { UpdateBanner } from "./components/UpdateBanner.js";
 import { SessionLaunchOverlay } from "./components/SessionLaunchOverlay.js";
 import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
 import { SessionEditorPane } from "./components/SessionEditorPane.js";
@@ -147,17 +148,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [currentSessionId, sessionCwd, diffBase, changedFilesTick, setGitChangedFilesCount]);
 
-  // Poll for updates
-  useEffect(() => {
-    const check = () => {
-      api.checkForUpdate().then((info) => {
-        useStore.getState().setUpdateInfo(info);
-      }).catch(() => {});
-    };
-    check();
-    const interval = setInterval(check, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Update polling disabled — fork does not track upstream releases
 
   // Load publicUrl from settings on mount (used for webhook URL generation)
   useEffect(() => {
@@ -200,7 +191,7 @@ export default function App() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar />
-        <UpdateBanner />
+        {/* UpdateBanner disabled — fork does not track upstream releases */}
         <div className="flex-1 overflow-hidden relative">
           {isSettingsPage && (
             <div className="absolute inset-0">
