@@ -32,7 +32,8 @@ import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
 import { LinearAgentBridge } from "./linear-agent-bridge.js";
 import { NoVncProxy } from "./novnc-proxy.js";
 
-import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
+// Update checker disabled — this fork does not track upstream npm releases
+// import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { getPushManager } from "./push-manager.js";
 import { restoreIfNeeded as restoreTailscaleFunnel, cleanup as cleanupTailscaleFunnel } from "./tailscale-manager.js";
@@ -396,12 +397,12 @@ restoreTailscaleFunnel(port).catch((err) => {
   console.warn("[server] Tailscale Funnel restoration failed:", err);
 });
 
-// ── Update checker ──────────────────────────────────────────────────────────
-startPeriodicCheck();
-if (isRunningAsService()) {
-  setServiceMode(true);
-  console.log("[server] Running as background service (auto-update available)");
-}
+// ── Update checker (disabled — fork does not track upstream releases) ────────
+// startPeriodicCheck();
+// if (isRunningAsService()) {
+//   setServiceMode(true);
+//   console.log("[server] Running as background service (auto-update available)");
+// }
 
 // ── Memory diagnostics ───────────────────────────────────────────────────────
 const MEMORY_LOG_INTERVAL_MS = 5 * 60_000; // every 5 minutes
